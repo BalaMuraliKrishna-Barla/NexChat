@@ -11,7 +11,7 @@ const HomePage = () => {
     <Container className="border border-dark">
       <Row className="justify-content-center mt-5 border border-danger">
         <Col md={6} className="border border-primary">
-          <h1 className="text-center mb-4">Chat-X</h1>
+          <h1 className="text-center mb-4">NexChat</h1>
           <Tabs
             id="controlled-tab"
             activeKey={key}

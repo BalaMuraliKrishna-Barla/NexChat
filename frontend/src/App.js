@@ -1,15 +1,18 @@
-import React from 'react'
-import { Route } from "react-router-dom";
-import HomePage from './pages/HomePage';
-import ChatsPage from './pages/ChatsPage';
-import './App.css'
+import React from "react";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import HomePage from "./pages/HomePage";
+import ChatsPage from "./pages/ChatsPage";
+import "./App.css";
+
 const App = () => {
   return (
-    <div className="App">
-      <Route path="/" component={HomePage} exact />
-      <Route path="/chats" component={ChatsPage} />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/chats" element={<ChatsPage />} />
+      </Routes>
+    </BrowserRouter>
   );
-}
+};
 
-export default App
+export default App;

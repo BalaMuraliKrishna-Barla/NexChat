@@ -14,23 +14,20 @@ const registerUser = asyncHandler(async (req, res) => {
     const {name, email, password, pic} = req.body;
 
     if(!name || !email || !password) {
-        res.status(400).json({ message: "Please fill in all fields" });
+        res.json({ message: "Please fill in all fields" });
         return;
     }
     
     const userExits = await User.findOne({email})
     if(userExits) {
-        res.status(401).json({ message: "User already exists!" });
+        res.json({ message: "Email already exists!" });
         return;
     }
 
-    if(!pic) {
-        pic = "https://res.cloudinary.com/dr8gzltrw/image/upload/v1726236560/defaultDP_ou3qvs.jpg"
-    }
     
     const hashedPassword = await hashPassword(password);
-    console.log(`password : ${password}`);
-    console.log(`hashed password : ${hashedPassword}`);
+    // console.log(`password : ${password}`);
+    // console.log(`hashed password : ${hashedPassword}`);
 
     const user = await User.create({ name, email, password : hashedPassword, pic })
     
