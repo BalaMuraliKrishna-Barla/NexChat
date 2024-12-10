@@ -8,6 +8,29 @@ import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
+const uploadImage = async(file) => {
+    const formData = new FormData();
+    formData.append('file', file)
+    formData.append('upload_preset', 'Chat-App')
+    
+    // const cloudinaryAPI = process.env.REACT_APP_CLOUDINARY_UPLOAD_API
+    const cloudinaryAPI = "https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload"
+
+    try {
+        // console.log('upload started...');
+        // console.log('api : ',cloudinaryAPI);
+            
+        const response = await fetch(cloudinaryAPI,{
+            method: 'POST',
+            body: formData
+        })
+        const result = await response.json()
+        // console.log('...upload finished');
+        return result.secure_url;
+    } catch (error) {
+        console.log('Error in uploading image : ',error);
+    }
+}
 
 export default function Signup() {
     
@@ -19,6 +42,8 @@ export default function Signup() {
     const [confirmPassword, setConfirmPassword] = useState('')
     const [pic, setPic] = useState('')
     const [loading, setLoading] = useState(false)
+    const [showRemoveFile, setShowRemoveFile] = useState(false);
+    
     const navigate = useNavigate()
 
     const handleFileChange = async(e) => {
@@ -28,6 +53,7 @@ export default function Signup() {
             if(uploadedImageURL) {
                 setPic(uploadedImageURL)
                 toast.success('Photo uploaded!',{pauseOnHover:false});
+                setShowRemoveFile(true);
             }
             else {
                 toast.error('Failed to upload!',{pauseOnHover:false})
@@ -57,17 +83,22 @@ export default function Signup() {
         if(!pic) {
             setPic("https://res.cloudinary.com/dr8gzltrw/image/upload/v1726236560/defaultDP_ou3qvs.jpg")
         }     
-        console.log('pic : ',pic);
+        // console.log('pic : ',pic);
 
         try {
             const res = await axios.post("/api/user/signup", {name, email, password, pic})
+            const { data } = res;            
             const msg = res.data.message;
             if(msg == 'Registration success!') {
                 toast.success(msg, {pauseOnHover: false})
-                // navigate('/chats')
-                alert("signup sucesss!")
+                setTimeout(() => {
+                    navigate('/chats')
+                }, 4000);
+
+                localStorage.setItem("userInfo", JSON.stringify(data));
             }
             else toast.error(msg, {pauseOnHover: false})
+            
         
         } catch (error) {
             toast.error(error.message, {pauseOnHover: false})
@@ -110,7 +141,7 @@ export default function Signup() {
 
                 {/* Confirm Password */}
                 <div style={{ position: 'relative' }}>    
-                    <Form.Control type={showPassword ? 'text' : 'password'} placeholder="Confirm Password" className='mb-3' required
+                    <Form.Control type={showConfirmPassword ? 'text' : 'password'} placeholder="Confirm Password" className='mb-3' required
                     onChange={ (e) => setConfirmPassword(e.target.value) } />
                     
                     <Button variant="link" 
@@ -140,7 +171,7 @@ export default function Signup() {
                         className='mb-3 h-25'
                         onChange={ (e) => handleFileChange(e) }
                     />
-                    {pic && ( 
+                    {showRemoveFile && ( 
                         <Button
                             variant="link"
                             className="position-absolute end-0 top-0"
@@ -170,30 +201,6 @@ export default function Signup() {
             </Form>
         </div>
     )
-}
-
-const uploadImage = async(file) => {
-    const formData = new FormData();
-    formData.append('file', file)
-    formData.append('upload_preset', 'Chat-App')
-    
-    // const cloudinaryAPI = process.env.REACT_APP_CLOUDINARY_UPLOAD_API
-    const cloudinaryAPI = "https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload"
-
-    try {
-        // console.log('upload started...');
-        // console.log('api : ',cloudinaryAPI);
-            
-        const response = await fetch(cloudinaryAPI,{
-            method: 'POST',
-            body: formData
-        })
-        const result = await response.json()
-        // console.log('...upload finished');
-        return result.secure_url;
-    } catch (error) {
-        console.log('Error in uploading image : ',error);
-    }
 }
 
 

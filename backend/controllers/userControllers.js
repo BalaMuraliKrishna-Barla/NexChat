@@ -7,7 +7,7 @@ const hashPassword = asyncHandler(async (password) => {
     const salt = await bcryptjs.genSalt(10);
     const hashedPassword = await bcryptjs.hash(password, salt)
     return hashedPassword;
-}) 
+});
 
 const registerUser = asyncHandler(async (req, res) => {
     
@@ -24,10 +24,7 @@ const registerUser = asyncHandler(async (req, res) => {
         return;
     }
 
-    
     const hashedPassword = await hashPassword(password);
-    // console.log(`password : ${password}`);
-    // console.log(`hashed password : ${hashedPassword}`);
 
     const user = await User.create({ name, email, password : hashedPassword, pic })
     
@@ -39,21 +36,27 @@ const registerUser = asyncHandler(async (req, res) => {
             email : user.email,
             pic : user.pic,
             token : generateToken(user._id)
-        })
+        })        
     } else {
         res.json({ message: "Failed in creating a user!" });
+        console.log("Registration failed");
         return;
     }
-})
+});
 
-const matchPassword = asyncHandler(async(pass, hashedPass) => await bcryptjs.compare(pass, hashedPass))
+const matchPassword = asyncHandler(async(pass, hashedPass) => 
+    await bcryptjs.compare(pass, hashedPass)
+);
 
 const authUser = asyncHandler(async (req, res) => {
     const { email, password} = req.body;
 
     const validUser = await User.findOne({email})
-
-    if(validUser && matchPassword(password, validUser.password)) {
+    if(!validUser) 
+        res.json({message: "User not exists!"});
+    
+    const isMatched = await matchPassword(password, validUser.password);
+    if(isMatched) {
         res.status(200).json({
             message: `Login success!`,
             _id: validUser._id,
@@ -66,6 +69,27 @@ const authUser = asyncHandler(async (req, res) => {
     }else {
         res.json({message : "Password mismatch!"})
     }
-})
+});
 
-module.exports = { registerUser, authUser }
+
+const getAllUsers = asyncHandler(async (req, res) => {
+    // building a query to search users when provided the search variable 
+    const keyword = req.query.search
+    ? {
+            $or: [
+                { name: { $regex: req.query.search, $options: 'i' } },
+                { email: { $regex: req.query.search, $options: 'i' } }
+            ]
+    } : {}; // if not then the query empty
+
+    let currentUserId = req.user._id;
+    console.log(await User.find({_id: {$eq: currentUserId}}));
+    
+    // finding all the users except the current user 
+    const users = await User.find(keyword).find({ _id: { $ne: currentUserId }});
+    
+    res.send(users);
+    
+});
+
+module.exports = { registerUser, authUser, getAllUsers }
