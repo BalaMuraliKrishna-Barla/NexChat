@@ -124,5 +124,4 @@ const renameGroupChat = expressAsyncHandler(async (req, res) => {
   }
 });
 
-
 module.exports = { accessChat, fetchChats, createGroupChat, renameGroupChat };
