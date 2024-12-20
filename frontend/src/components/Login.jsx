@@ -13,7 +13,9 @@ const Login = () => {
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
-    const handleLoginClick = async () => {
+    const handleFormSubmit = async (e) => {
+             
+        e.preventDefault();
         setLoading(true);
         if(!email || !password) {
             toast.warning("Please fill all the fields!", {pauseOnHover: false})
@@ -45,7 +47,7 @@ const Login = () => {
     }
     return (
         <div>
-            <Form>
+            <Form onSubmit={handleFormSubmit}>
                 <Form.Control type="email" placeholder="Enter Your Email Address" className='mb-3' required
                 onChange={ (e) => setEmail(e.target.value) } />
 
@@ -68,7 +70,7 @@ const Login = () => {
                     </Button>
                 </div>
 
-                <Button variant="primary" onClick={handleLoginClick} className="w-100 mt-3 mb-3">
+                <Button variant="primary" className="w-100 mt-3 mb-3" type='submit'>
                     {loading? "Loading..." : "Login"}
                 </Button>
 

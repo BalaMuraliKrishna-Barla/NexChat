@@ -67,7 +67,9 @@ export default function Signup() {
         document.getElementById('fileInput').value = '';
     }
 
-    const handleSignUpClick = async() => {
+    const handleSubmit = async(e) => {
+        e.preventDefault();
+
         setLoading(true);
         if(!name || !email || !password || !confirmPassword) {
             toast.warn('Please Enter All the Fields!',{pauseOnHover: false})
@@ -89,7 +91,7 @@ export default function Signup() {
             const res = await axios.post("/api/user/signup", {name, email, password, pic})
             const { data } = res;            
             const msg = res.data.message;
-            if(msg == 'Registration success!') {
+            if(msg === 'Registration success!') {
                 toast.success(msg, {pauseOnHover: false})
                 setTimeout(() => {
                     navigate('/chats')
@@ -109,7 +111,7 @@ export default function Signup() {
     }
     return (
         <div>
-            <Form>
+            <Form onSubmit={handleSubmit}>
                 {/* Username */}
                 <Form.Control type="text" placeholder="Enter Your Name" className='mb-3' required 
                 onChange={ (e) => setName(e.target.value) }/>
@@ -192,7 +194,7 @@ export default function Signup() {
 
 
                 {/* Signup Button */}
-                <Button variant="danger" onClick={handleSignUpClick} className="w-100 mb-3">
+                <Button variant="danger" type='submit' className="w-100 mb-3">
                     {loading? "Loading..." : "Signup"}
                 </Button>
                 
