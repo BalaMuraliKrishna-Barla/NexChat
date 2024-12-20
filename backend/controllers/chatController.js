@@ -130,9 +130,11 @@ const addToGroup = expressAsyncHandler(async (req, res) => {
     chatId,
     { $push: { users: userId } },
     { new: true }
-  );
+  )
+    .populate("users", "-password")
+    .populate("groupAdmin", "-password");
 
-  if(!added) {
+  if (!added) {
     res.status(400);
     throw new Error("Chat Not Found");
   } else {
@@ -140,4 +142,10 @@ const addToGroup = expressAsyncHandler(async (req, res) => {
   }
 });
 
-module.exports = { accessChat, fetchChats, createGroupChat, renameGroupChat, addToGroup };
+module.exports = {
+  accessChat,
+  fetchChats,
+  createGroupChat,
+  renameGroupChat,
+  addToGroup,
+};
