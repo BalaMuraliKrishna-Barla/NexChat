@@ -76,6 +76,7 @@ const createGroupChat = expressAsyncHandler(async (req, res) => {
   }
 
   var users = JSON.parse(req.body.users);
+  users.push(req.user._id);
 
   if (users.length < 2) {
     return res
@@ -83,7 +84,6 @@ const createGroupChat = expressAsyncHandler(async (req, res) => {
       .send({ message: "More than 2 users are required to form a group chat" });
   }
 
-  users.push(req.user._id);
 
   try {
     const groupChat = await Chat.create({
@@ -160,6 +160,34 @@ const removeFromGroup = expressAsyncHandler(async (req, res) => {
   }
 });
 
+const deleteGroupChat = expressAsyncHandler(async (req, res) => {
+  const { chatId } = req.body;
+
+  // Find the chat and check if it exists
+  const chat = await Chat.findById(chatId);
+
+  if (!chat) {
+    res.status(400);
+    throw new Error("Chat Not Found");
+  }
+
+  // Check if the user is the group admin
+  if (chat.groupAdmin.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("You are not authorized to delete this group chat");
+  }
+
+  try {
+    // Delete the chat
+    await Chat.findByIdAndDelete(chatId);
+
+    res.status(200).json({ message: "Group chat deleted successfully" });
+  } catch (err) {
+    res.status(400);
+    throw new Error(err.message);
+  }
+});
+
 module.exports = {
   accessChat,
   fetchChats,
@@ -167,4 +195,5 @@ module.exports = {
   renameGroupChat,
   addToGroup,
   removeFromGroup,
+  deleteGroupChat,
 };
