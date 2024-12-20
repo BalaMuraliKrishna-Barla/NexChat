@@ -70,6 +70,34 @@ const fetchChats = expressAsyncHandler(async (req, res) => {
   }
 });
 
+const deleteChat = expressAsyncHandler(async (req, res) => {
+  const { chatId } = req.body;
+
+  // Find the chat and check if it exists
+  const chat = await Chat.findById(chatId);
+
+  if (!chat) {
+    res.status(400);
+    throw new Error("Chat Not Found");
+  }
+
+  // Check if the user is one of the participants
+  if (!chat.users.includes(req.user._id)) {
+    res.status(403);
+    throw new Error("You are not a participant in this chat");
+  }
+
+  try {
+    // Delete the chat
+    await Chat.findByIdAndDelete(chatId);
+
+    res.status(200).json({ message: "Chat deleted successfully" });
+  } catch (err) {
+    res.status(400);
+    throw new Error(err.message);
+  }
+});
+
 const createGroupChat = expressAsyncHandler(async (req, res) => {
   if (!req.body.users || !req.body.name) {
     return res.status(400).send({ message: "Fill all the fields" });
@@ -191,6 +219,7 @@ const deleteGroupChat = expressAsyncHandler(async (req, res) => {
 module.exports = {
   accessChat,
   fetchChats,
+  deleteChat,
   createGroupChat,
   renameGroupChat,
   addToGroup,
