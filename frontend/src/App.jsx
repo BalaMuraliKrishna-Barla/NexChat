@@ -3,14 +3,17 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import ChatsPage from "./pages/ChatsPage";
 import "./App.css";
+import ChatProvider from "./Context/ChatProvider";
 
 const App = () => {
   return (
     <BrowserRouter>
+    <ChatProvider>
       <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/chats" element={<ChatsPage />} />
+        <Route path="/" Component={ HomePage } />
+        <Route path="/chats" Component={ ChatsPage } />
       </Routes>
+    </ChatProvider>
     </BrowserRouter>
   );
 };

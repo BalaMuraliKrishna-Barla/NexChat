@@ -25,13 +25,21 @@ const Login = () => {
         // API call to login
         try {
             const res = await axios.post("/api/user/login", {email, password})
-            console.log(res.data);
+            // console.log(res.data);
             
             const msg = res?.data?.message;
             console.log(msg);
             
             if(msg === "Login success!") {
                 toast.success(msg, { pauseOnHover: false });
+                const userData = {
+                    _id: res.data._id,
+                    name: res.data.name,
+                    email: res.data.email,
+                    token: res.data.token,
+                    pic: res.data.pic 
+                };
+                localStorage.setItem('userInfo', JSON.stringify(userData));
                 navigate('/chats')
             } else {
                 console.log("Got an error");

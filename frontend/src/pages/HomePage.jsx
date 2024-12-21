@@ -1,10 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Col, Container, Row, Tabs, TabPane } from 'react-bootstrap';
 import Signup from '../components/Signup';
 import Login from '../components/Login';
+import { useNavigate } from 'react-router-dom';
 
 
 const HomePage = () => {
+
+  const navigate = useNavigate();
+  useEffect(() => {
+    let user = localStorage.getItem("userInfo");
+    if(user) navigate("/chats");
+
+  }, [navigate])
+  
   const [key, setKey] = useState('login');
 
   return (
