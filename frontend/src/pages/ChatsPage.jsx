@@ -1,29 +1,23 @@
-import React, { useEffect, useState } from 'react'
-import axios from 'axios'
+// import React, { useEffect, useState } from 'react'
+// import axios from 'axios'
+// import { ChatState } from '../Context/ChatProvider'
+// import SideBar from '../components/miscellaneous/SideBar';
+import Header from '../components/Chats/Header';
+import Body from '../components/Chats/Body';
+import Footer from '../components/Chats/Footer';
 const ChatsPage = () => {
 
-    // const [chats, setChats] = useState([])
-    // const fetchChats = async () => {
-    //     const {data} = await axios.get("/api/chats")
-    //     setChats(data);
-    //     console.log("Got chats", data);
-        
-        
-    // }
-
-    // useEffect(() => {
-    //   fetchChats();
-    // }, [])
-    
+  // let { user } = ChatState();
+  
+  
+  
 
   return (
-    // <div>
-    //     <ul style={{ paddingLeft: '20px' }}>    
-    //     { chats.map((chat) => ( <li key={chat._id}>{chat.chatName}</li> ))}
-    //     </ul>
-    // </div>
     <div>
       <h1>Chats page!</h1>
+      <Header />
+      <Body />
+      <Footer />
     </div>
   )
 }

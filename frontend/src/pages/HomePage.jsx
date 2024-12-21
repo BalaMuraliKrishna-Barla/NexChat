@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Col, Container, Row, Tabs, TabPane } from 'react-bootstrap';
-import Signup from '../components/Signup';
-import Login from '../components/Login';
+import Signup from '../components/Authentication/Signup';
+import Login from '../components/Authentication/Login';
 import { useNavigate } from 'react-router-dom';
 
 

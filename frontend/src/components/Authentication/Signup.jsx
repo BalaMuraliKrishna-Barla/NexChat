@@ -81,14 +81,13 @@ export default function Signup() {
             setLoading(false)
             return;
         }
+        const defaultPic = "https://res.cloudinary.com/dr8gzltrw/image/upload/v1726236560/defaultDP_ou3qvs.jpg";
+        const profilePic = pic || defaultPic;
         
-        if(!pic) {
-            setPic("https://res.cloudinary.com/dr8gzltrw/image/upload/v1726236560/defaultDP_ou3qvs.jpg")
-        }     
-        // console.log('pic : ',pic);
+        console.log('pic : ',profilePic);
 
         try {
-            const res = await axios.post("/api/user/signup", {name, email, password, pic})
+            const res = await axios.post("/api/user/signup", {name, email, password, pic: profilePic})
             const { data } = res;            
             const msg = res.data.message;
             if(msg === 'Registration success!') {
