@@ -1,0 +1,45 @@
+/* Remove the down arrow */
+.profile-dropdown .nav-link {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+/* Show dropdown when hovering on profile image */
+.profile-dropdown:hover .dropdown-menu {
+    display: block;
+}
+
+/* Initially hide the dropdown */
+.profile-dropdown .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    min-width: 150px;
+}
+
+/* Additional styling for the profile pic */
+.profile-pic {
+    border-radius: 50%;
+    height: 40px;
+    width: 40px;
+    object-fit: cover;
+}
+
+/* Styling for buttons/icons */
+button {
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+button .fa {
+    font-size: 1.25rem;
+    color: #333;
+}
+
+button:hover .fa {
+    color: #007bff;
+    /* Change icon color on hover */
+}

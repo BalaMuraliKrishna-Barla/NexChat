@@ -84,7 +84,6 @@ export default function Signup() {
         const defaultPic = "https://res.cloudinary.com/dr8gzltrw/image/upload/v1726236560/defaultDP_ou3qvs.jpg";
         const profilePic = pic || defaultPic;
         
-        console.log('pic : ',profilePic);
 
         try {
             const res = await axios.post("/api/user/signup", {name, email, password, pic: profilePic})

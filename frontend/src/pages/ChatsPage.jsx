@@ -14,7 +14,7 @@ const ChatsPage = () => {
 
   return (
     <div>
-      <h1>Chats page!</h1>
+      {/* <h1>Chats page!</h1> */}
       <Header />
       <Body />
       <Footer />

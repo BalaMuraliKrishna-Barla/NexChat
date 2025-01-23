@@ -9,7 +9,7 @@ const {
   deleteGroupChat,
   deleteChat,
 } = require("../controllers/chatController");
-const { protect } = require("../middleware/authMiddleware");
+const { protect } = require("../middleware/authMiddleWare");
 const router = express.Router();
 
 router.route("/").post(protect, accessChat);

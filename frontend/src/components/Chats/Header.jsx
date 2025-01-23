@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Image, Nav, Navbar, NavDropdown } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { ChatState } from '../../Context/ChatProvider';
 
@@ -11,60 +10,72 @@ const Header = () => {
   useEffect(() => {
     if (loggedOut) {
       const timeout = setTimeout(() => {
-        navigate("/"); 
+        navigate("/");
       }, 2000);
-      return () => clearTimeout(timeout); // Cleanup the timeout if component unmounts
+      return () => clearTimeout(timeout);
     }
   }, [loggedOut, navigate]);
 
   const handleLogout = () => {
-    setLoggedOut(true); 
-    localStorage.removeItem("userInfo"); 
+    setLoggedOut(true);
+    localStorage.removeItem("userInfo");
   };
 
   return (
-      <div>
-        <Navbar expand="lg" className="bg-body-tertiary">
-          <Container>
-            <Navbar.Brand href="#home">React-Bootstrap</Navbar.Brand>
-            <Navbar.Toggle aria-controls="basic-navbar-nav" />
-            <Navbar.Collapse id="basic-navbar-nav">
-              <Nav className="me-auto"> </Nav>
-              <Nav className="ms-auto">
-                <Nav.Link href="#home">Home</Nav.Link>
-                <Nav.Link href="#link">Link</Nav.Link>
-                <NavDropdown
-                  title={
-                    user ? (
-                      <Image
-                        src={user.pic}
-                        alt={user.name}
-                        style={{ height: "40px", width: "40px" }}
-                        roundedCircle
-                      />
-                    ) : (
-                      <span>Loading...</span> // Fallback if user info is not available
-                    )
-                  }
-                  id="basic-nav-dropdown"
+    <nav className="navbar navbar-light bg-light">
+      <div className="container">
+        {/* Brand Name */}
+        <a className="navbar-brand" href="#home">NexChat</a>
+
+        {/* Right Section */}
+        <div className="d-flex align-items-center gap-3">
+          {/* Dark/Light Toggle Icon */}
+          <button className="btn btn-outline-secondary">
+            <i className="fas fa-moon"></i> {/* Moon icon for dark mode */}
+          </button>
+
+          {/* Notifications Icon */}
+          <button className="btn btn-outline-primary">
+            <i className="fas fa-bell"></i> {/* Bell icon for notifications */}
+          </button>
+
+          {/* Profile Dropdown */}
+          <div className="dropdown profile-dropdown">
+            <a
+              className="nav-link"
+              href="#"
+              id="profileDropdown"
+              role="button"
+            >
+              {user ? (
+                <img
+                  src={user.pic}
+                  alt={user.name}
+                  className="profile-pic"
+                  style={{ height: "40px", width: "40px", borderRadius: "50%" }}
+                />
+              ) : (
+                <span>Loading...</span>
+              )}
+            </a>
+            <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
+              <li>
+                <a className="dropdown-item" href="#profile">Profile</a>
+              </li>
+              <li>
+                <button
+                  className="dropdown-item text-danger"
+                  onClick={handleLogout}
                 >
-                  <NavDropdown.Item href="#action/3.1">Account Settings</NavDropdown.Item>
-                  <NavDropdown.Item href="#action/3.2">Change Password</NavDropdown.Item>
-                  <NavDropdown.Divider />
-                  <NavDropdown.Item
-                    href="#logout"
-                    onClick={handleLogout}
-                    className="text-danger"
-                  >
-                    Logout
-                  </NavDropdown.Item>
-                </NavDropdown>
-              </Nav>
-            </Navbar.Collapse>
-          </Container>
-        </Navbar>
+                  Logout
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
-    );
+    </nav>
+  );
 };
 
 export default Header;
