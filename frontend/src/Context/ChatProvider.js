@@ -24,4 +24,5 @@ const ChatProvider = ({ children }) => {
 };
 
 export const ChatState = () => useContext(ChatContext);
+
 export default ChatProvider;
