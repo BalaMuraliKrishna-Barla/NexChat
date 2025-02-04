@@ -1,0 +1,15 @@
+.blur-top::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 80px;
+    /* Adjust for more or less blur area */
+    background: rgba(255, 255, 255, 0.05);
+    /* Reduce opacity for stronger blur effect */
+    backdrop-filter: blur(20px);
+    /* Increase blur intensity */
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 1;
+}
