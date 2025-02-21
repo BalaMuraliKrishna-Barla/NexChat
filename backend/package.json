@@ -1,11 +1,11 @@
 {
-  "name": "chat-app",
+  "name": "chat-app-backend",
   "version": "1.0.0",
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "nodemon server.js",
-    "dev": "node server.js"
+    "backend": "nodemon server.js",
+    "start": "node server.js"
   },
   "author": "mk",
   "license": "ISC",

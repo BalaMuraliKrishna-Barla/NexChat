@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChatState } from '../../Context/ChatProvider';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { ChatState } from "../../Context/ChatProvider";
+import { Bell, Moon, Sun, User } from "lucide-react"; // New Modern Icons
 
 const Header = () => {
   const navigate = useNavigate();
   const { user } = ChatState();
   const [loggedOut, setLoggedOut] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     if (loggedOut) {
@@ -22,56 +24,66 @@ const Header = () => {
   };
 
   return (
-    <nav className="navbar navbar-light bg-light">
-      <div className="container">
-        {/* Brand Name */}
-        <a className="navbar-brand" href="#home">NexChat</a>
+    <nav
+      className="navbar position-fixed top-0 w-100  d-flex justify-content-between align-items-center px-4"
+      style={{
+        backdropFilter: "blur(15px)", // Glassmorphism effect
+        WebkitBackdropFilter: "blur(15px)", // Safari support
+        background: "rgba(255, 255, 255, 0.1)", // Light transparent effect
+        padding: "10px 20px",
+        zIndex: 10,
+      }}
+    >
+      {/* Brand Name */}
+      <a className="navbar-brand text-light fs-4 fw-bold" href="#home">
+        NexChat
+      </a>
 
-        {/* Right Section */}
-        <div className="d-flex align-items-center gap-3">
-          {/* Dark/Light Toggle Icon */}
-          <button className="btn btn-outline-secondary">
-            <i className="fas fa-moon"></i> {/* Moon icon for dark mode */}
+      {/* Right Section */}
+      <div className="d-flex align-items-center gap-3">
+        {/* Theme Toggle */}
+        <button
+          className="btn"
+          onClick={() => setDarkMode(!darkMode)}
+          style={{ color: "white" }}
+        >
+          {darkMode ? <Sun size={24} /> : <Moon size={24} />}
+        </button>
+
+        {/* Notifications */}
+        <button className="btn" style={{ color: "white" }}>
+          <Bell size={24} />
+        </button>
+
+        {/* Profile */}
+        <div className="dropdown">
+          <button
+            className="btn dropdown-toggle"
+            id="profileDropdown"
+            data-bs-toggle="dropdown"
+            aria-expanded="false"
+            style={{ color: "white" }}
+          >
+            {user ? (
+              <img
+                src={user.pic}
+                alt={user.name}
+                className="rounded-circle"
+                style={{ height: "40px", width: "40px", objectFit: "cover" }}
+              />
+            ) : (
+              <User size={24} />
+            )}
           </button>
 
-          {/* Notifications Icon */}
-          <button className="btn btn-outline-primary">
-            <i className="fas fa-bell"></i> {/* Bell icon for notifications */}
-          </button>
-
-          {/* Profile Dropdown */}
-          <div className="dropdown profile-dropdown">
-            <a
-              className="nav-link"
-              href="#"
-              id="profileDropdown"
-              role="button"
+          <ul className="dropdown-menu dropdown-menu-end">
+            <button
+              className="dropdown-item text-danger"
+              onClick={handleLogout}
             >
-              {user ? (
-                <img
-                  src={user.pic}
-                  alt={user.name}
-                  className="profile-pic"
-                  style={{ height: "40px", width: "40px", borderRadius: "50%" }}
-                />
-              ) : (
-                <span>Loading...</span>
-              )}
-            </a>
-            <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
-              <li>
-                <a className="dropdown-item" href="#profile">Profile</a>
-              </li>
-              <li>
-                <button
-                  className="dropdown-item text-danger"
-                  onClick={handleLogout}
-                >
-                  Logout
-                </button>
-              </li>
-            </ul>
-          </div>
+              Logout
+            </button>
+          </ul>
         </div>
       </div>
     </nav>

@@ -6,6 +6,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
+    
     const [showPassword, setShowPassword] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -56,6 +57,7 @@ const Login = () => {
                     placeholder="Enter Your Email Address" 
                     className='mb-3' 
                     required
+                    value={email}
                     onChange={(e) => setEmail(e.target.value)} 
                 />
 
@@ -64,6 +66,7 @@ const Login = () => {
                         type={showPassword ? 'text' : 'password'} 
                         placeholder="Password" 
                         required
+                        value={password}
                         onChange={(e) => setPassword(e.target.value)} 
                     />
                     
@@ -89,6 +92,16 @@ const Login = () => {
 
                 <ToastContainer position="bottom-center" autoClose={3000} hideProgressBar={false} />
             </Form>
+
+            <button className='btn btn-success mb-3'
+            onClick={
+                () => {
+                    setEmail("pavan@example.com")
+                    setPassword("pavan")
+                }
+            }>
+                Quick Login
+            </button>
         </div>
     );
 };
