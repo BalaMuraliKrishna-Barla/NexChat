@@ -99,19 +99,23 @@ const deleteChat = expressAsyncHandler(async (req, res) => {
 });
 
 const createGroupChat = expressAsyncHandler(async (req, res) => {
+  // The body is already parsed by express.json()
   if (!req.body.users || !req.body.name) {
-    return res.status(400).send({ message: "Fill all the fields" });
-  }
-
-  var users = JSON.parse(req.body.users);
-  users.push(req.user._id);
-
-  if (users.length < 2) {
     return res
       .status(400)
-      .send({ message: "More than 2 users are required to form a group chat" });
+      .send({ message: "Please provide a name and users for the group" });
   }
 
+  // 'users' should already be an array
+  var users = req.body.users;
+
+  if (!Array.isArray(users) || users.length < 2) {
+    return res
+      .status(400)
+      .send({ message: "A group chat requires at least 2 other users." });
+  }
+
+  users.push(req.user._id);
 
   try {
     const groupChat = await Chat.create({

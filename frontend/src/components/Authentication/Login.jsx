@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Button, Form } from 'react-bootstrap';
 import { AiOutlineEye, AiOutlineEyeInvisible } from 'react-icons/ai';
 import { toast, ToastContainer } from 'react-toastify';
-import axios from 'axios';
+// import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { loginUser } from '../../services/api'; 
 
 const Login = () => {
     
@@ -22,27 +23,17 @@ const Login = () => {
             return;
         }
         try {
-            const res = await axios.post("/api/user/login", { email, password });
-            const msg = res?.data?.message;
-            console.log(msg);
+            // Use the service function
+            const { data } = await loginUser(email, password);
             
-            if (msg === "Login success!") {
-                toast.success(msg, { pauseOnHover: false });
-                const userData = {
-                    _id: res.data._id,
-                    name: res.data.name,
-                    email: res.data.email,
-                    token: res.data.token,
-                    pic: res.data.pic
-                };
-                localStorage.setItem('userInfo', JSON.stringify(userData));
-                navigate('/chats');
-            } else {
-                console.log("Got an error");
-                toast.error(msg, { pauseOnHover: false });
-            }
+            toast.success("Login success!", { pauseOnHover: false });
+            
+            // The data from the response is now in `data`
+            localStorage.setItem('userInfo', JSON.stringify(data));
+            navigate('/chats');
+
         } catch (error) {
-            const errorMessage = error?.response?.data?.message || error.message || "An error occurred";
+            const errorMessage = error?.response?.data?.message || "An error occurred";
             toast.error(errorMessage, { pauseOnHover: false });
         } finally {
             setLoading(false);

@@ -61,13 +61,13 @@ const authUser = asyncHandler(async (req, res) => {
             message: `Login success!`,
             _id: validUser._id,
             name: validUser.name,
-            password : validUser.password,
+            // password : validUser.password,
             email: validUser.email,
             pic: validUser.pic,
             token: generateToken(validUser._id),
         });
     }else {
-        res.json({message : "Password mismatch!"})
+        res.status(401).json({ message: "Invalid Email or Password" });
     }
 });
 

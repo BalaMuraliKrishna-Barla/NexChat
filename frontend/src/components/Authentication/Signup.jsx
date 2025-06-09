@@ -4,8 +4,10 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FaTrash } from 'react-icons/fa';
 import { AiOutlineEye, AiOutlineEyeInvisible } from 'react-icons/ai';
-import axios from 'axios';
+// import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { registerUser } from '../../services/api';
+
 
 const uploadImage = async (file) => {
     const formData = new FormData();
@@ -76,9 +78,9 @@ export default function Signup() {
         const profilePic = pic || defaultPic;
         
         try {
-            const res = await axios.post("/api/user/signup", { name, email, password, pic: profilePic });
-            const { data } = res;
-            const msg = res.data.message;
+            const { data } = await registerUser({ name, email, password, pic: profilePic });
+             
+            const msg = data.message;
             if (msg === 'Registration success!') {
                 toast.success(msg, { pauseOnHover: false });
                 setTimeout(() => {
