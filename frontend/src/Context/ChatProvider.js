@@ -1,23 +1,35 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom"; // Import useNavigate for navigation
+import { useNavigate } from "react-router-dom";
 
 const ChatContext = createContext();
 
 const ChatProvider = ({ children }) => {
   const [user, setUser] = useState();
-  const navigate = useNavigate(); // Use useNavigate to navigate
+  const [selectedChat, setSelectedChat] = useState(); // The chat currently open in ChatBox
+  const [chats, setChats] = useState([]); // The user's list of all chats
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const userInfo = JSON.parse(localStorage.getItem("userInfo"));
     setUser(userInfo);
 
     if (!userInfo) {
-      navigate("/"); // Redirect to the home or login page if no user is found
+      navigate("/");
     }
-  }, [navigate]); // Adding `navigate` as a dependency
+  }, [navigate]);
 
   return (
-    <ChatContext.Provider value={{ user, setUser }}>
+    <ChatContext.Provider
+      value={{
+        user,
+        setUser,
+        selectedChat,
+        setSelectedChat,
+        chats,
+        setChats,
+      }}
+    >
       {children}
     </ChatContext.Provider>
   );

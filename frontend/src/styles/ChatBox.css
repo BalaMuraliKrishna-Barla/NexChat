@@ -1,0 +1,19 @@
+.chat-box {
+    background-color: #f8f9fa;
+    /* A light grey background */
+    border: 1px solid #dee2e6;
+    overflow-y: hidden;
+}
+
+.messages {
+    display: flex;
+    flex-direction: column;
+    overflow-y: scroll;
+    scrollbar-width: none;
+    /* For Firefox */
+}
+
+.messages::-webkit-scrollbar {
+    display: none;
+    /* For Chrome, Safari, and Opera */ 
+}
