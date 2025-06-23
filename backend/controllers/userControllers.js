@@ -90,4 +90,30 @@ const getAllUsers = asyncHandler(async (req, res) => {
     
 });
 
-module.exports = { registerUser, authUser, getAllUsers }
+
+const updateUserProfile = asyncHandler(async (req, res) => {
+  const { name, pic } = req.body;
+
+  const user = await User.findById(req.user._id);
+
+  if (user) {
+    user.name = name || user.name;
+    user.pic = pic || user.pic;
+
+    const updatedUser = await user.save();
+
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      pic: updatedUser.pic,
+      token: generateToken(updatedUser._id), // Re-issue token in case payload has info
+    });
+  } else {
+    res.status(404);
+    throw new Error("User not found");
+  }
+});
+
+
+module.exports = { registerUser, authUser, getAllUsers, updateUserProfile }

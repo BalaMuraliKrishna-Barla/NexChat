@@ -32,7 +32,11 @@ export const searchUsers = (searchQuery, token) => {
     headers: { Authorization: `Bearer ${token}` },
   });
 };
-
+export const updateUserProfile = (userData, token) => {
+  return api.put("/user/profile", userData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
 // --- End - User Routes ---
 
 // --- Chat Routes ---
