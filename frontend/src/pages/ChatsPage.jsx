@@ -12,7 +12,7 @@ const ENDPOINT = process.env.NODE_ENV === 'production' ? '/' : 'http://localhost
 let socket;
 
 const ChatsPage = () => {
-  const { user, selectedChat, setOnlineUsers, setTypingStatus } = ChatState();
+  const { user, selectedChat, setOnlineUsers, setTypingStatus, notifications, setNotifications } = ChatState();
   const [fetchAgain, setFetchAgain] = useState(false);
 
   useEffect(() => {
@@ -23,24 +23,29 @@ const ChatsPage = () => {
     
     socket.on("connected", () => console.log("Socket connected on ChatsPage"));
     socket.on("online users", (users) => setOnlineUsers(users));
-    
-    // NEW: Global listeners for typing indicators
     socket.on('typing', (chatId) => {
         setTypingStatus(prev => ({ ...prev, [chatId]: true }));
     });
     socket.on('stop typing', (chatId) => {
         setTypingStatus(prev => ({ ...prev, [chatId]: false }));
     });
+    socket.on("message recieved", (newMessageReceived)=> {
+       // If the chat is NOT open, add it to our list of notifications.
+       if (!selectedChat || selectedChat._id !== newMessageReceived.chat._id) {
+        setNotifications([newMessageReceived, ...notifications]);
+      }
+      // Always refresh the chat list to show the new latest message.
+      setFetchAgain(prev => !prev); 
+    });
 
     return () => socket.disconnect();
-  }, [user, setOnlineUsers, setTypingStatus]);
+  }, [user, setOnlineUsers, setTypingStatus, selectedChat, notifications, setNotifications]);
 
   return (
     <div style={{ width: "100%", backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
       {user && <Header />}
       <Container fluid className="p-3">
         <Row style={{ paddingTop: '75px', height: 'calc(100vh - 75px)' }}>
-          {/* FIX: Correctly checks `selectedChat` instead of `user.selectedChat` */}
           <Col md={4} lg={3} className={`${selectedChat ? 'd-none' : 'd-flex'} d-md-flex flex-column h-100`}>
             {user && <MyChats fetchAgain={fetchAgain} />}
           </Col>

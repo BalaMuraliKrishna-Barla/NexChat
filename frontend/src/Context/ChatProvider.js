@@ -10,6 +10,7 @@ const ChatProvider = ({ children }) => {
   const [chats, setChats] = useState([]); // The user's list of all chats
   const [onlineUsers, setOnlineUsers] = useState([]); // The list of online users
   const [typingStatus, setTypingStatus] = useState({});
+  const [notifications, setNotifications] = useState([]); // Notifications for new messages
 
   const navigate = useNavigate();
 
@@ -35,6 +36,8 @@ const ChatProvider = ({ children }) => {
         setOnlineUsers,
         typingStatus,
         setTypingStatus,
+        notifications,
+        setNotifications,
       }}
     >
       {children}
