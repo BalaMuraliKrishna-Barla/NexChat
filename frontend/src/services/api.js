@@ -18,7 +18,9 @@ api.interceptors.response.use(
   }
 );
 
+
 // --- User Routes ---
+
 export const loginUser = (email, password) => {
   return api.post("/user/login", { email, password });
 };
@@ -31,7 +33,10 @@ export const searchUsers = (searchQuery, token) => {
   });
 };
 
+// --- End - User Routes ---
+
 // --- Chat Routes ---
+
 export const fetchChats = (token) => {
   return api.get("/chat", {
     headers: { Authorization: `Bearer ${token}` },
@@ -46,14 +51,54 @@ export const accessChat = (userId, token) => {
     }
   );
 };
-// NEW: Added the missing createGroupChat function
+
+// --- End - Chat Routes ---
+
+
+// --- Group Chat Routes ---
+
 export const createGroupChat = (groupData, token) => {
   return api.post(`/chat/group`, groupData, {
     headers: { Authorization: `Bearer ${token}` },
   });
 };
 
+export const renameGroup = (chatId, chatName, token) => {
+  return api.put(
+    "/chat/rename",
+    { chatId, newChatName: chatName },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+};
+
+export const addUserToGroup = (chatId, userId, token) => {
+  return api.put(
+    "/chat/add-to-group",
+    { chatId, userId },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+};
+
+export const removeUserFromGroup = (chatId, userId, token) => {
+  return api.put(
+    "/chat/remove-from-group",
+    { chatId, userId },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+};
+
+// --- End - Group Chat Routes ---
+
+
+
 // --- Message Routes ---
+
 export const fetchMessages = (chatId, token) => {
   return api.get(`/message/${chatId}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -64,5 +109,9 @@ export const sendMessage = (messageData, token) => {
     headers: { Authorization: `Bearer ${token}` },
   });
 };
+
+// --- End - Message Routes ---
+
+
 
 export default api;

@@ -3,8 +3,8 @@
 const express = require("express");
 const http = require("http");
 const dotenv = require("dotenv");
-const helmet = require("helmet"); // Security headers
-const rateLimit = require("express-rate-limit"); // Prevents brute-force attacks
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const path = require("path");
 const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes.js");
@@ -17,29 +17,23 @@ connectDB();
 const app = express();
 app.use(express.json());
 
-// --- Security Middleware ---
-app.use(helmet()); // Apply basic security headers
+// --- Security & API Setup (No changes here) ---
+app.use(helmet());
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Limit each IP to 200 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 200,
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use("/api", limiter); // Apply rate limiting to all API routes
-
-// --- API Routes ---
+app.use("/api", limiter);
 app.use("/api/user", userRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/message", messageRoutes);
 
-// --- Deployment ---
+// --- Deployment Logic (No changes here) ---
 const __dirname1 = path.resolve();
-
 if (process.env.NODE_ENV === "production") {
-  // Serve the static files from the React build folder
   app.use(express.static(path.join(__dirname1, "/frontend/build")));
-
-  // For any request that doesn't match an API route, send back the React app's index.html file
   app.get("*", (req, res) => {
     res.sendFile(path.resolve(__dirname1, "frontend", "build", "index.html"));
   });
@@ -48,11 +42,9 @@ if (process.env.NODE_ENV === "production") {
     res.send("API is running for Development!");
   });
 }
-// --- End Deployment ---
 
 const port = process.env.PORT || 5000;
 const server = http.createServer(app);
-
 server.listen(
   port,
   console.log(`Server is listening on Port: ${port}`.white.bold)
@@ -62,15 +54,19 @@ server.listen(
 const io = require("socket.io")(server, {
   pingTimeout: 60000,
   cors: {
-    origin: "http://localhost:3000", // Your frontend URL for development
+    origin: "http://localhost:3000",
   },
 });
 
+let onlineUsers = {};
+
 io.on("connection", (socket) => {
-  console.log("Connected to socket.io");
+  console.log("Connected to socket.io", socket.id);
 
   socket.on("setup", (userData) => {
     socket.join(userData._id);
+    onlineUsers[userData._id] = socket.id;
+    io.emit("online users", Object.keys(onlineUsers));
     socket.emit("connected");
   });
 
@@ -79,13 +75,13 @@ io.on("connection", (socket) => {
     console.log("User Joined Room: " + room);
   });
 
-  socket.on("typing", (room) => socket.in(room).emit("typing"));
-  socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
+  // FIX: Removed the duplicate and incorrect handlers. These are the correct ones.
+  socket.on("typing", (room) => socket.in(room).emit("typing", room));
+  socket.on("stop typing", (room) => socket.in(room).emit("stop typing", room));
 
   socket.on("new message", (newMessageRecieved) => {
     var chat = newMessageRecieved.chat;
     if (!chat.users) return console.log("chat.users not defined");
-
     chat.users.forEach((user) => {
       if (user._id == newMessageRecieved.sender._id) return;
       socket.in(user._id).emit("message recieved", newMessageRecieved);
@@ -93,6 +89,13 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("USER DISCONNECTED");
+    console.log("USER DISCONNECTED", socket.id);
+    for (const userId in onlineUsers) {
+      if (onlineUsers[userId] === socket.id) {
+        delete onlineUsers[userId];
+        break;
+      }
+    }
+    io.emit("online users", Object.keys(onlineUsers));
   });
 });

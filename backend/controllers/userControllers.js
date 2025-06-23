@@ -56,18 +56,16 @@ const authUser = asyncHandler(async (req, res) => {
         res.json({message: "User not exists!"});
     
     const isMatched = await matchPassword(password, validUser.password);
-    if(isMatched) {
-        res.status(200).json({
-            message: `Login success!`,
-            _id: validUser._id,
-            name: validUser.name,
-            // password : validUser.password,
-            email: validUser.email,
-            pic: validUser.pic,
-            token: generateToken(validUser._id),
-        });
-    }else {
-        res.status(401).json({ message: "Invalid Email or Password" });
+    if (isMatched) {
+      res.status(200).json({
+        _id: validUser._id,
+        name: validUser.name,
+        email: validUser.email,
+        pic: validUser.pic,
+        token: generateToken(validUser._id),
+      });
+    } else {
+      res.status(401).json({ message: "Invalid Email or Password" });
     }
 });
 

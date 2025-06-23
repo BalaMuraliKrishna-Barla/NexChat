@@ -80,8 +80,8 @@ done
 echo "Finished writing $OUTPUT_FILE."
 
 # --- Generate directory tree excluding ignored folders ---
-ignore_pattern=$(IFS="|"; echo "${IGNORE_DIRS[*]}")
-tree -a -I "$ignore_pattern" "$START_DIR" > "$TREE_FILE"
-echo "Directory tree saved to $TREE_FILE."
+# ignore_pattern=$(IFS="|"; echo "${IGNORE_DIRS[*]}")
+# tree -a -I "$ignore_pattern" "$START_DIR" > "$TREE_FILE"
+# echo "Directory tree saved to $TREE_FILE."
 
 exit 0

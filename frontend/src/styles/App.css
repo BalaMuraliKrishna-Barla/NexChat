@@ -4,3 +4,15 @@
     min-height: 100vh;
     font-family: 'Lora', serif;
 }
+
+.online-indicator {
+    position: absolute;
+    bottom: 2px;
+    right: 12px;
+    width: 12px;
+    height: 12px;
+    background-color: #28a745;
+    /* A nice green color */
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.2); }

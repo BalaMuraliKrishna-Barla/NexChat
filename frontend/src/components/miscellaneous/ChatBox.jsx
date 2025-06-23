@@ -3,62 +3,50 @@
 import React, { useEffect, useState } from 'react';
 import { ChatState } from '../../Context/ChatProvider';
 import { Spinner, Form, InputGroup, Button } from 'react-bootstrap';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Settings } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { fetchMessages, sendMessage } from '../../services/api';
 import ScrollableChat from './ScrollableChat';
-import io from 'socket.io-client';
+import UpdateGroupChatModal from './UpdateGroupChatModal';
 import './../../styles/ChatBox.css';
 
-const ENDPOINT = process.env.NODE_ENV === 'production' ? '/' : 'http://localhost:5000';
-var socket, selectedChatCompare;
+var selectedChatCompare;
 
 const getSenderFull = (loggedUser, users) => {
   if (!loggedUser || !users || users.length < 2) return null;
   return users[0]?._id === loggedUser?._id ? users[1] : users[0];
 };
 
-const ChatBox = ({ fetchAgain, setFetchAgain }) => {
+const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [newMessage, setNewMessage] = useState("");
-  const [socketConnected, setSocketConnected] = useState(false);
-  const [typing, setTyping] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
+  
+  // This state is now only to track if the *current user* is in the middle of a typing session
+  const [isCurrentlyTyping, setIsCurrentlyTyping] = useState(false);
 
-  const { user, selectedChat, setSelectedChat } = ChatState();
-
-  useEffect(() => {
-    socket = io(ENDPOINT);
-    socket.emit("setup", user);
-    socket.on('connected', () => setSocketConnected(true));
-    socket.on('typing', () => setIsTyping(true));
-    socket.on('stop typing', () => setIsTyping(false));
-
-    return () => socket.disconnect();
-  }, []);
+  const { user, selectedChat, setSelectedChat, typingStatus } = ChatState();
 
   useEffect(() => {
     const loadMessages = async () => {
-      if (!selectedChat) return;
+      if (!selectedChat || !socket) return;
       setLoading(true);
       try {
         const { data } = await fetchMessages(selectedChat._id, user.token);
         setMessages(data);
         socket.emit("join chat", selectedChat._id);
-      } catch (error) {
-        toast.error("Failed to Load Messages");
-      }
+      } catch (error) { toast.error("Failed to Load Messages"); }
       setLoading(false);
     };
     loadMessages();
     selectedChatCompare = selectedChat;
-  }, [selectedChat]);
-  
+  }, [selectedChat, user.token, socket]);
+
   useEffect(() => {
+    if (!socket) return;
     const messageListener = (newMessageReceived) => {
       if (!selectedChatCompare || selectedChatCompare._id !== newMessageReceived.chat._id) {
-        // Handle notifications for other chats
+        // Handle notifications
       } else {
         setMessages((prev) => [...prev, newMessageReceived]);
       }
@@ -66,11 +54,11 @@ const ChatBox = ({ fetchAgain, setFetchAgain }) => {
     };
     socket.on("message recieved", messageListener);
     return () => socket.off("message recieved", messageListener);
-  }, [fetchAgain]);
+  }, [socket, fetchAgain, setFetchAgain]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (newMessage.trim()) {
+    if (newMessage.trim() && socket) {
       socket.emit("stop typing", selectedChat._id);
       try {
         const tempMessage = newMessage;
@@ -85,46 +73,69 @@ const ChatBox = ({ fetchAgain, setFetchAgain }) => {
     }
   };
 
+  // FIX: This is the new, robust way to handle the typing indicator
   const typingHandler = (e) => {
     setNewMessage(e.target.value);
-    if (!socketConnected) return;
+    if (!socket) return;
 
-    if (!typing) {
-      setTyping(true);
+    // If we haven't started typing yet, emit the event
+    if (!isCurrentlyTyping) {
+      setIsCurrentlyTyping(true);
       socket.emit("typing", selectedChat._id);
     }
-    let lastTypingTime = new Date().getTime();
-    var timerLength = 3000;
-    setTimeout(() => {
-      var timeNow = new Date().getTime();
-      var timeDiff = timeNow - lastTypingTime;
-      if (timeDiff >= timerLength && typing) {
-        socket.emit("stop typing", selectedChat._id);
-        setTyping(false);
-      }
-    }, timerLength);
   };
   
+  // This useEffect hook now manages the "stop typing" debounce timer
+  useEffect(() => {
+    if (!socket) return;
+    
+    // If the input is empty or the chat changes, stop typing immediately
+    if (!newMessage.trim()) {
+        if (isCurrentlyTyping) {
+            socket.emit("stop typing", selectedChat._id);
+            setIsCurrentlyTyping(false);
+        }
+        return;
+    }
+    
+    // Set a timer. If it completes, it means the user has stopped typing.
+    const timer = setTimeout(() => {
+      socket.emit("stop typing", selectedChat._id);
+      setIsCurrentlyTyping(false);
+    }, 2000); // 2 seconds after last keypress
+
+    // Cleanup: If the user types again, clear the previous timer
+    return () => clearTimeout(timer);
+  }, [newMessage, selectedChat, socket, isCurrentlyTyping]);
+
+
   const sender = getSenderFull(user, selectedChat?.users);
+  
+  // Check the global typing status for this specific chat
+  const otherUserIsTyping = typingStatus[selectedChat?._id];
 
   return (
     <div className="d-flex flex-column p-3 bg-white w-100" style={{ borderRadius: '10px', height: '100%' }}>
       {selectedChat ? (
         <>
-          <h4 className="mb-3 pb-2 d-flex align-items-center border-bottom">
-            <Button variant="light" className="d-md-none me-2 p-1" onClick={() => setSelectedChat(null)}>
-              <ArrowLeft size={20} />
-            </Button>
-            {sender && <img src={sender.pic} alt={sender.name} className="rounded-circle me-3" style={{width: 40, height: 40, objectFit: 'cover'}}/>}
-            {selectedChat.isGroupChat ? selectedChat.chatName : sender?.name}
-          </h4>
+          {/* Header remains the same... */}
+          <div className="mb-3 pb-2 d-flex justify-content-between align-items-center border-bottom">
+            <div className="d-flex align-items-center">
+              <Button variant="light" className="d-md-none me-2 p-1" onClick={() => setSelectedChat(null)}><ArrowLeft size={20} /></Button>
+              {!selectedChat.isGroupChat && sender && (<img src={sender.pic} alt={sender.name} className="rounded-circle me-3" style={{width: 40, height: 40, objectFit: 'cover'}}/>)}
+              <h5 className="m-0">{selectedChat.isGroupChat ? selectedChat.chatName : sender?.name}</h5>
+            </div>
+            {selectedChat.isGroupChat && (<UpdateGroupChatModal fetchAgain={fetchAgain} setFetchAgain={setFetchAgain}><Button variant="light"><Settings size={20} /></Button></UpdateGroupChatModal>)}
+          </div>
+          
           <div className="chat-box d-flex flex-column justify-content-end w-100 h-100 p-3 rounded">
             {loading ? (
-              <Spinner animation="border" className="align-self-center m-auto" />
+              <Spinner animation="border" variant="primary" className="align-self-center m-auto" />
             ) : (
               <div className="messages">
                 <ScrollableChat messages={messages} />
-                {isTyping ? <div className="text-muted small ms-4">typing...</div> : <></>}
+                {/* FIX: This now reads from the global state, not a local one */}
+                {otherUserIsTyping && <div className="text-muted small ms-4">typing...</div>}
               </div>
             )}
             <Form onSubmit={handleSendMessage} className="mt-3">
@@ -142,7 +153,7 @@ const ChatBox = ({ fetchAgain, setFetchAgain }) => {
         </>
       ) : (
         <div className="d-flex align-items-center justify-content-center h-100">
-          <h3 className="text-muted">Select a chat to start messaging</h3>
+          <div className="text-center text-muted"><h3>Select a chat</h3><p>or search for a user to start messaging.</p></div>
         </div>
       )}
     </div>

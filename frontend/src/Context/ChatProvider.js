@@ -1,3 +1,4 @@
+// frontend/src/Context/ChatProvider.js
 import { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -7,6 +8,8 @@ const ChatProvider = ({ children }) => {
   const [user, setUser] = useState();
   const [selectedChat, setSelectedChat] = useState(); // The chat currently open in ChatBox
   const [chats, setChats] = useState([]); // The user's list of all chats
+  const [onlineUsers, setOnlineUsers] = useState([]); // The list of online users
+  const [typingStatus, setTypingStatus] = useState({});
 
   const navigate = useNavigate();
 
@@ -28,6 +31,10 @@ const ChatProvider = ({ children }) => {
         setSelectedChat,
         chats,
         setChats,
+        onlineUsers,
+        setOnlineUsers,
+        typingStatus,
+        setTypingStatus,
       }}
     >
       {children}
