@@ -1,9 +1,8 @@
+// frontend/src/index.js
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "./styles/index.css";
+import "./index.css"; // This now contains Tailwind styles
 import App from "./App";
-import "bootstrap/dist/css/bootstrap.min.css";
-import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

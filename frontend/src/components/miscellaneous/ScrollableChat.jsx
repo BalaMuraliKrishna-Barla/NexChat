@@ -1,68 +1,78 @@
 // frontend/src/components/miscellaneous/ScrollableChat.jsx
-
 import React from 'react';
 import ScrollableFeed from 'react-scrollable-feed';
 import { ChatState } from '../../Context/ChatProvider';
-import { Tooltip, OverlayTrigger } from 'react-bootstrap';
+import { Download, FileText } from 'lucide-react';
+import MessageStatus from './MessageStatus'; 
 
-// Helper functions to determine message layout
-const isSameSender = (messages, m, i, userId) => {
+const FileMessage = ({ fileUrl, fileType }) => {
+  if (fileType.startsWith('image/')) {
+    return (
+      <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+        <img src={fileUrl} alt="sent file" className="mt-2 rounded-lg max-w-xs max-h-64 object-cover" />
+      </a>
+    );
+  }
+  
+  if (fileType === 'application/pdf') {
+    return (
+      <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center p-3 mt-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+        <FileText size={40} className="text-red-500 mr-3" />
+        <span className="font-medium text-gray-700">View PDF</span>
+      </a>
+    );
+  }
+
   return (
-    i < messages.length - 1 &&
-    (messages[i + 1].sender._id !== m.sender._id || messages[i + 1].sender._id === undefined) &&
-    messages[i].sender._id !== userId
-  );
-};
-const isLastMessage = (messages, i, userId) => {
-  return (
-    i === messages.length - 1 &&
-    messages[messages.length - 1].sender._id !== userId &&
-    messages[messages.length - 1].sender._id
+    <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center p-3 mt-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+      <Download size={40} className="text-gray-500 mr-3" />
+      <span className="font-medium text-gray-700">Download File</span>
+    </a>
   );
 };
 
 const ScrollableChat = ({ messages }) => {
   const { user } = ChatState();
 
+  const formatTime = (dateString) => {
+    const options = { hour: 'numeric', minute: '2-digit', hour12: true };
+    return new Date(dateString).toLocaleTimeString('en-US', options);
+  };
+
   return (
-    <ScrollableFeed>
-      {messages &&
-        messages.map((m, i) => (
-          <div style={{ display: 'flex' }} key={m._id}>
-            {/* Show avatar for last message of a user in a group */}
-            {(isSameSender(messages, m, i, user._id) || isLastMessage(messages, i, user._id)) && m.chat.isGroupChat && (
-              <OverlayTrigger
-                placement="right"
-                overlay={<Tooltip id={`tooltip-${m.sender._id}`}>{m.sender.name}</Tooltip>}
+    <ScrollableFeed className="flex flex-col px-2 sm:px-4">
+      {messages && messages.map((m, i) => {
+        const isMyMessage = m.sender._id === user._id;
+        
+        return (
+          <div key={m._id} className={`flex items-end my-1 ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
+            <div className={`flex flex-col max-w-xs md:max-w-md ${isMyMessage ? 'items-end' : 'items-start'}`}>
+              <div
+                className={`px-3 py-2 rounded-2xl inline-block ${isMyMessage ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'}`}
               >
-                <img
-                  src={m.sender.pic}
-                  alt={m.sender.name}
-                  className="rounded-circle"
-                  style={{ width: '30px', height: '30px', objectFit: 'cover', marginTop: '7px', marginRight: '5px' }}
-                />
-              </OverlayTrigger>
-            )}
-            
-            <span
-              style={{
-                backgroundColor: `${m.sender._id === user._id ? '#0d6efd' : '#e9ecef'}`,
-                color: `${m.sender._id === user._id ? 'white' : 'black'}`,
-                marginLeft: m.sender._id === user._id ? 'auto' : (isSameSender(messages, m, i, user._id) || isLastMessage(messages, i, user._id)) && m.chat.isGroupChat ? '0' : '40px',
-                marginTop: '5px',
-                borderRadius: '15px',
-                padding: '8px 15px',
-                maxWidth: '75%',
-              }}
-            >
-              {/* FIX: Show sender's name in group chats above their message */}
-              {m.chat.isGroupChat && m.sender._id !== user._id && (
-                  <div style={{fontWeight: 'bold', fontSize: '0.8em', marginBottom: '3px'}}>{m.sender.name}</div>
-              )}
-              {m.content}
-            </span>
+                {/* Show sender's name in group chats */}
+                {m.chat.isGroupChat && !isMyMessage && (
+                  <p className="text-xs font-bold text-purple-600">{m.sender.name}</p>
+                )}
+                
+                {/* Display either the file or the text content */}
+                {m.fileUrl ? 
+                  <FileMessage fileUrl={m.fileUrl} fileType={m.fileType} /> : 
+                  <p className="text-sm break-words">{m.content}</p>
+                }
+                
+                {/* FIX: Time and Read Receipt Status */}
+                <div className="flex justify-end items-center mt-1">
+                  <span className={`text-xs ${isMyMessage ? 'text-blue-200' : 'text-gray-500'}`}>
+                    {formatTime(m.createdAt)}
+                  </span>
+                  {isMyMessage && <MessageStatus message={m} chat={m.chat} currentUser={user} />}
+                </div>
+              </div>
+            </div>
           </div>
-        ))}
+        );
+      })}
     </ScrollableFeed>
   );
 };

@@ -1,17 +1,20 @@
-const mongoose = require('mongoose')
+// backend/models/messageModel.js
+const mongoose = require("mongoose");
 
-const messageModel = mongoose.Schema({
-    sender : {
-        type : mongoose.Schema.Types.ObjectId, ref : "User"
+const messageModel = mongoose.Schema(
+  {
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    content: { type: String, trim: true }, // Text content, now optional
+    fileUrl: { type: String }, // URL of the uploaded file
+    fileType: { type: String }, // e.g., 'image/png', 'application/pdf'
+    chat: { type: mongoose.Schema.Types.ObjectId, ref: "Chat" },
+    isRead: {
+      type: Boolean,
+      default: false,
     },
-    content : { 
-        type : String, trim : true 
-    },
-    chat : { 
-        type : mongoose.Schema.Types.ObjectId, ref : "Chat" 
-    },
-},{ timestamps : true })
+  },
+  { timestamps: true }
+);
 
-const Message = mongoose.model("Message", messageModel)
-
+const Message = mongoose.model("Message", messageModel);
 module.exports = Message;

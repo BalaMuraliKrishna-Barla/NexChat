@@ -4,16 +4,16 @@ import React, { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { ChatState } from '../../Context/ChatProvider';
 import { fetchChats } from '../../services/api';
-import { Button, ListGroup, Spinner, Badge } from 'react-bootstrap';
 import GroupChatModal from './GroupChatModal';
+import { LoaderCircle, Plus } from 'lucide-react';
 
 const getSender = (loggedUser, users) => {
-  if (!loggedUser || !users || users.length < 2) return { name: "Unknown User", pic: "" };
+  if (!loggedUser || !users || users.length < 2) return { name: "Unknown User", pic: "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg" };
   return users[0]?._id === loggedUser?._id ? users[1] : users[0];
 };
 
 const MyChats = ({ fetchAgain }) => {
-  const { user, selectedChat, setSelectedChat, chats, setChats, onlineUsers, typingStatus, notifications, setNotifications } = ChatState();
+  const { user, selectedChat, setSelectedChat, chats, setChats, notifications, setNotifications, onlineUsers } = ChatState();
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -23,75 +23,81 @@ const MyChats = ({ fetchAgain }) => {
       try {
         const { data } = await fetchChats(user.token);
         setChats(data);
-      } catch (error) { toast.error("Failed to load chats."); }
-      finally { setLoading(false); }
+      } catch (error) { 
+        toast.error("Failed to load chats.");
+      } finally {
+        setLoading(false);
+      }
     };
     loadChats();
-  }, [user, fetchAgain, setChats]);
+    // FIX: Added `onlineUsers` to dependency array to force re-render when it changes.
+  }, [user, fetchAgain, setChats, onlineUsers]);
 
   const handleChatClick = (chat) => {
     setSelectedChat(chat);
-    // When a chat is clicked, clear all notifications for that specific chat.
     setNotifications(notifications.filter(n => n.chat._id !== chat._id));
   };
 
   return (
-    <div className="d-flex flex-column h-100 p-3 bg-white" style={{ borderRadius: '10px' }}>
-      <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-        <h4 className="m-0">My Chats</h4>
-        <GroupChatModal><Button variant="light">+ New Group</Button></GroupChatModal>
+    <div className="flex flex-col h-full bg-white rounded-xl shadow-lg border border-gray-200">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <h2 className="text-xl font-bold text-gray-800">My Chats</h2>
+        <GroupChatModal>
+          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            <Plus size={16} /> New Group
+          </button>
+        </GroupChatModal>
       </div>
-      <div className="flex-grow-1" style={{ overflowY: 'auto' }}>
+
+      <div className="flex-1 overflow-y-auto p-2">
         {loading ? (
-          <div className="text-center mt-5"><Spinner animation="border" variant="primary" /></div>
+          <div className="flex justify-center items-center h-full"><LoaderCircle className="w-8 h-8 text-blue-600 animate-spin" /></div>
         ) : chats.length > 0 ? (
-          <ListGroup variant="flush">
+          <div className="flex flex-col space-y-1">
             {chats.map((chat) => {
+              const isSelected = selectedChat?._id === chat._id;
               const sender = getSender(user, chat.users);
               const isOnline = !chat.isGroupChat && onlineUsers.includes(sender?._id);
-              const isTyping = typingStatus[chat._id];
-              // Count how many notifications exist for this chat.
+              
+              // Find the most recent notification for this chat, if any.
+              const latestNotification = notifications.find(n => n.chat._id === chat._id);
               const notificationCount = notifications.filter(n => n.chat._id === chat._id).length;
 
-              return (
-                <ListGroup.Item
-                  key={chat._id}
-                  action
-                  onClick={() => handleChatClick(chat)}
-                  active={selectedChat?._id === chat._id}
-                  className="d-flex justify-content-between align-items-center p-2 rounded mb-1"
-                >
-                  <div className="d-flex align-items-center" style={{ overflow: 'hidden' }}>
-                    <div style={{ position: 'relative' }}>
-                      <img src={!chat.isGroupChat ? sender.pic : 'https://i.pravatar.cc/150?u=group'} alt="avatar" className="rounded-circle me-3" style={{ width: '45px', height: '45px', objectFit: 'cover' }} />
-                      {isOnline && <span className="online-indicator"></span>}
-                    </div>
-                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <strong>{!chat.isGroupChat ? sender.name : chat.chatName}</strong>
-                      
-                      {isTyping ? (
-                        <div className="text-success small fst-italic">typing...</div>
-                      ) : chat.latestMessage ? (
-                        <div className={`text-muted small ${notificationCount > 0 ? 'fw-bold text-success' : ''}`}>
-                          {notificationCount === 0 && <strong>{chat.latestMessage.sender.name}: </strong>}
-                          {chat.latestMessage.content.length > 25 ? chat.latestMessage.content.substring(0, 25) + "..." : chat.latestMessage.content}
-                        </div>
-                      ) : (
-                        <div className="text-muted small">No messages yet.</div>
-                      )}
-                    </div>
-                  </div>
+              // Determine what text to show as the preview.
+              let latestMessageText = "No messages yet.";
+              if (latestNotification) {
+                latestMessageText = latestNotification.content || "Sent a file";
+              } else if (chat.latestMessage) {
+                const prefix = chat.latestMessage.sender._id === user._id ? "You: " : "";
+                latestMessageText = prefix + (chat.latestMessage.content || "Sent a file");
+              }
 
-                  {/* The Notification Badge */}
-                  {notificationCount > 0 && (
-                    <Badge bg="success" pill>{notificationCount}</Badge>
-                  )}
-                </ListGroup.Item>
+              return (
+                <button
+                  key={chat._id}
+                  onClick={() => handleChatClick(chat)}
+                  className={`flex items-center w-full p-3 rounded-lg text-left transition-colors ${isSelected ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+                >
+                  <div className="relative flex-shrink-0">
+                    <img src={!chat.isGroupChat ? sender.pic : 'https://i.pravatar.cc/150?u=group'} alt="avatar" className="w-12 h-12 rounded-full object-cover mr-4" />
+                    {isOnline && <div className="absolute bottom-0 right-4 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 truncate">{!chat.isGroupChat ? sender.name : chat.chatName}</p>
+                    <p className={`text-sm truncate ${notificationCount > 0 ? 'text-blue-600 font-bold' : 'text-gray-500'}`}>
+                      {latestMessageText}
+                    </p>
+                  </div>
+                  {notificationCount > 0 && <span className="ml-2 px-2 py-0.5 text-xs font-bold text-white bg-blue-600 rounded-full">{notificationCount}</span>}
+                </button>
               );
             })}
-          </ListGroup>
+          </div>
         ) : (
-          <div className="text-center text-muted mt-5"><p>No chats found.</p><p>Click the search icon to start a new conversation.</p></div>
+          <div className="text-center text-gray-500 mt-10 p-4">
+            <p className="font-medium">No chats found.</p>
+            <p className="text-sm">Click the search icon to start a new conversation.</p>
+          </div>
         )}
       </div>
     </div>

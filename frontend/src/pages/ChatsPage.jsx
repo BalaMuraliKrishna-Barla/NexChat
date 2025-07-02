@@ -5,7 +5,6 @@ import { ChatState } from "../Context/ChatProvider";
 import MyChats from "../components/miscellaneous/MyChats";
 import ChatBox from "../components/miscellaneous/ChatBox";
 import Header from "../components/Chats/Header";
-import { Container, Row, Col } from 'react-bootstrap';
 import io from 'socket.io-client';
 
 const ENDPOINT = process.env.NODE_ENV === 'production' ? '/' : 'http://localhost:5000';
@@ -15,6 +14,7 @@ const ChatsPage = () => {
   const { user, selectedChat, setOnlineUsers, setTypingStatus, notifications, setNotifications } = ChatState();
   const [fetchAgain, setFetchAgain] = useState(false);
 
+  // This useEffect now has a STABLE dependency array.
   useEffect(() => {
     if (!user) return;
     
@@ -23,37 +23,51 @@ const ChatsPage = () => {
     
     socket.on("connected", () => console.log("Socket connected on ChatsPage"));
     socket.on("online users", (users) => setOnlineUsers(users));
-    socket.on('typing', (chatId) => {
-        setTypingStatus(prev => ({ ...prev, [chatId]: true }));
-    });
-    socket.on('stop typing', (chatId) => {
-        setTypingStatus(prev => ({ ...prev, [chatId]: false }));
-    });
-    socket.on("message recieved", (newMessageReceived)=> {
-       // If the chat is NOT open, add it to our list of notifications.
-       if (!selectedChat || selectedChat._id !== newMessageReceived.chat._id) {
-        setNotifications([newMessageReceived, ...notifications]);
-      }
-      // Always refresh the chat list to show the new latest message.
-      setFetchAgain(prev => !prev); 
-    });
-
-    return () => socket.disconnect();
-  }, [user, setOnlineUsers, setTypingStatus, selectedChat, notifications, setNotifications]);
+    
+    // These listeners are set up once and will update state correctly.
+    socket.on('typing', (chatId) => setTypingStatus(prev => ({ ...prev, [chatId]: true })));
+    socket.on('stop typing', (chatId) => setTypingStatus(prev => ({ ...prev, [chatId]: false })));
+    
+    return () => {
+        socket.disconnect();
+    };
+    // FIX: The dependency array now only contains stable functions from the context provider.
+    // It will not run again when `selectedChat` or `notifications` change.
+  }, [user, setOnlineUsers, setTypingStatus]);
+  
+  // This separate useEffect handles ONLY the message listener.
+  useEffect(() => {
+      if(!socket) return;
+      
+      const messageListener = (newMessageReceived) => {
+          if (!selectedChat || selectedChat._id !== newMessageReceived.chat._id) {
+            if (!notifications.some(n => n._id === newMessageReceived._id)) {
+                setNotifications([newMessageReceived, ...notifications]);
+            }
+          }
+          setFetchAgain(prev => !prev);
+      };
+      
+      socket.on("message recieved", messageListener);
+      
+      return () => {
+          socket.off("message recieved", messageListener);
+      };
+  }, [socket, selectedChat, notifications, setNotifications])
 
   return (
-    <div style={{ width: "100%", backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
+    <div className="w-full min-h-screen bg-gray-100">
       {user && <Header />}
-      <Container fluid className="p-3">
-        <Row style={{ paddingTop: '75px', height: 'calc(100vh - 75px)' }}>
-          <Col md={4} lg={3} className={`${selectedChat ? 'd-none' : 'd-flex'} d-md-flex flex-column h-100`}>
+      <main className="pt-[60px] h-screen">
+        <div className="flex h-full p-2 sm:p-4 gap-2 sm:gap-4">
+          <div className={`${selectedChat ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-1/3 lg:w-1/4`}>
             {user && <MyChats fetchAgain={fetchAgain} />}
-          </Col>
-          <Col md={8} lg={9} className={`${selectedChat ? 'd-flex' : 'd-none'} d-md-flex flex-column h-100`}>
+          </div>
+          <div className={`${selectedChat ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-2/3 lg:w-3/4`}>
             {user && <ChatBox fetchAgain={fetchAgain} setFetchAgain={setFetchAgain} socket={socket} />}
-          </Col>
-        </Row>
-      </Container>
+          </div>
+        </div>
+      </main>
     </div>
   );
 };

@@ -1,41 +1,42 @@
 // frontend/src/components/miscellaneous/ProfileModal.jsx
 
 import React, { useState } from 'react';
-import { Modal, Button, Form, Image } from 'react-bootstrap';
 import { ChatState } from '../../Context/ChatProvider';
 import { toast } from 'react-toastify';
 import { updateUserProfile } from '../../services/api';
+import ReusableModal from './ReusableModal'; // Use our custom modal
 
 const ProfileModal = ({ children }) => {
-  const [show, setShow] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState('');
   const [pic, setPic] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const { user, setUser } = ChatState();
 
   const handleShow = () => {
+    if(!user) return;
     setName(user.name);
     setPic(user.pic);
-    setShow(true);
+    setIsOpen(true);
   };
-  const handleClose = () => setShow(false);
+  const handleClose = () => setIsOpen(false);
 
   const handleImageUpload = async (file) => {
-    setLoading(true);
+    setUploading(true);
     if (file === undefined) {
       toast.error("Please select an image!");
-      setLoading(false);
+      setUploading(false);
       return;
     }
     if (file.type === "image/jpeg" || file.type === "image/png") {
       const data = new FormData();
       data.append("file", file);
-      data.append("upload_preset", "Chat-App"); 
+      data.append("upload_preset", "Chat-App");
       
-      const cloudinaryAPI = "https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload";
       try {
-        const res = await fetch(cloudinaryAPI, {
+        const res = await fetch("https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload", {
           method: "POST",
           body: data,
         });
@@ -48,18 +49,15 @@ const ProfileModal = ({ children }) => {
     } else {
       toast.error("Please select a JPEG or PNG image.");
     }
-    setLoading(false);
+    setUploading(false);
   };
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
       const { data } = await updateUserProfile({ name, pic }, user.token);
-      
-      // Update the user info in both context and localStorage
       localStorage.setItem("userInfo", JSON.stringify(data));
       setUser(data);
-      
       toast.success("Profile updated successfully!");
       handleClose();
     } catch (error) {
@@ -70,41 +68,43 @@ const ProfileModal = ({ children }) => {
 
   return (
     <>
-      <span onClick={handleShow}>{children}</span>
+      <div onClick={handleShow}>{children}</div>
 
-      <Modal show={show} onHide={handleClose} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>{user?.name}'s Profile</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="text-center">
-          <Image src={pic} alt={user?.name} roundedCircle style={{ width: '150px', height: '150px', objectFit: 'cover', marginBottom: '20px' }} />
-          <h4 className="text-muted">{user?.email}</h4>
-          
-          <Form>
-            <Form.Group className="mb-3">
-              <Form.Label>Update Name</Form.Label>
-              <Form.Control
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </Form.Group>
-            <Form.Group className="mb-3">
-              <Form.Label>Update Profile Picture</Form.Label>
-              <Form.Control
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleImageUpload(e.target.files[0])}
-              />
-            </Form.Group>
-          </Form>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="primary" onClick={handleSubmit} disabled={loading}>
+      <ReusableModal
+        isOpen={isOpen}
+        onClose={handleClose}
+        title={`${user?.name}'s Profile`}
+        footer={
+          <button onClick={handleSubmit} disabled={loading || uploading} className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400">
             {loading ? "Saving..." : "Save Changes"}
-          </Button>
-        </Modal.Footer>
-      </Modal>
+          </button>
+        }
+      >
+        <div className="flex flex-col items-center space-y-4">
+          <img src={pic} alt={user?.name} className="w-36 h-36 rounded-full object-cover shadow-md" />
+          <h4 className="text-lg text-gray-500">{user?.email}</h4>
+          
+          <div className="w-full space-y-2">
+            <label className="text-sm font-medium text-gray-700">Update Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="w-full space-y-2">
+            <label className="text-sm font-medium text-gray-700">Update Profile Picture</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleImageUpload(e.target.files[0])}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+            {uploading && <p className="text-xs text-blue-600">Uploading image...</p>}
+          </div>
+        </div>
+      </ReusableModal>
     </>
   );
 };

@@ -10,6 +10,7 @@ const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes.js");
 const chatRoutes = require("./routes/chatRoutes.js");
 const messageRoutes = require("./routes/messageRoutes.js");
+const Message = require("./models/messageModel");
 
 dotenv.config();
 connectDB();
@@ -17,7 +18,7 @@ connectDB();
 const app = express();
 app.use(express.json());
 
-// --- Security & API Setup (No changes here) ---
+// --- Security & API Setup ---
 app.use(helmet());
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -30,7 +31,7 @@ app.use("/api/user", userRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/message", messageRoutes);
 
-// --- Deployment Logic (No changes here) ---
+// --- Deployment Logic ---
 const __dirname1 = path.resolve();
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname1, "/frontend/build")));
@@ -75,7 +76,8 @@ io.on("connection", (socket) => {
     console.log("User Joined Room: " + room);
   });
 
-  // FIX: Removed the duplicate and incorrect handlers. These are the correct ones.
+  // FIX: REMOVED THE DUPLICATE AND INCORRECT HANDLERS.
+  // These are the only, and correct, versions.
   socket.on("typing", (room) => socket.in(room).emit("typing", room));
   socket.on("stop typing", (room) => socket.in(room).emit("stop typing", room));
 
@@ -86,6 +88,18 @@ io.on("connection", (socket) => {
       if (user._id == newMessageRecieved.sender._id) return;
       socket.in(user._id).emit("message recieved", newMessageRecieved);
     });
+  });
+
+  socket.on("mark as read", async ({ chatId, userId }) => {
+    try {
+      await Message.updateMany(
+        { chat: chatId, sender: { $ne: userId } },
+        { isRead: true }
+      );
+      socket.in(chatId).emit("messages read", { chatId });
+    } catch (error) {
+      console.log("Error marking messages as read:", error);
+    }
   });
 
   socket.on("disconnect", () => {
