@@ -12,6 +12,10 @@ const messageModel = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    parentMessage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+    },
   },
   { timestamps: true }
 );

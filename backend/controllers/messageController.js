@@ -7,7 +7,7 @@ const Chat = require("../models/chatModel");
 
 // sendMessage function remains unchanged.
 const sendMessage = asyncHandler(async (req, res) => {
-  const { content, chatId, fileUrl, fileType } = req.body;
+  const { content, chatId, fileUrl, fileType, parentMessage } = req.body;
   if (!chatId || (!content && !fileUrl)) {
     console.log("Invalid data passed into request");
     return res.sendStatus(400);
@@ -18,6 +18,7 @@ const sendMessage = asyncHandler(async (req, res) => {
     content: content,
     fileUrl: fileUrl,
     fileType: fileType,
+    parentMessage: parentMessage,
     chat: chatId,
   };
   
@@ -25,6 +26,10 @@ const sendMessage = asyncHandler(async (req, res) => {
     var message = await Message.create(newMessage);
     message = await message.populate("sender", "name pic");
     message = await message.populate("chat");
+    message = await message.populate({
+      path: "parentMessage",
+      populate: { path: "sender", select: "name" },
+    });
     message = await User.populate(message, {
       path: "chat.users",
       select: "name pic email",
@@ -51,7 +56,11 @@ const allMessages = asyncHandler(async (req, res) => {
 
     const messages = await Message.find({ chat: req.params.chatId })
       .populate("sender", "name pic email")
-      .populate("chat");
+      .populate("chat")
+      .populate({
+        path: 'parentMessage',
+        populate: { path: 'sender', select: 'name' }
+      });
 
     res.json(messages);
   } catch (error) {
