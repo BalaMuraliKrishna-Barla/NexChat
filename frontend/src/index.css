@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Apply the default sans-serif font (which is now Poppins) to the entire app */
+/* @layer base {
+    body {
+        @apply font-sans;
+    }
+} */

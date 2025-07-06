@@ -1,8 +1,14 @@
+const defaultTheme = require("tailwindcss/defaultTheme");
+
 module.exports = {
   darkMode: "class",
   content: ["./src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      // Add the Poppins font family
+      // fontFamily: {
+      //   sans: ["Poppins", ...defaultTheme.fontFamily.sans],
+      // },
       colors: {
         // Light Theme Colors
         "light-bg": "#F8FAFC", // slate-50
