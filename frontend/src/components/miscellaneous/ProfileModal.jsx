@@ -3,8 +3,9 @@
 import React, { useState } from 'react';
 import { ChatState } from '../../Context/ChatProvider';
 import { toast } from 'react-toastify';
-import { updateUserProfile } from '../../services/api';
-import ReusableModal from './ReusableModal'; // Use our custom modal
+// Import the centralized upload function
+import { updateUserProfile, uploadToCloudinary } from '../../services/api';
+import ReusableModal from './ReusableModal';
 
 const ProfileModal = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -30,24 +31,18 @@ const ProfileModal = ({ children }) => {
       setUploading(false);
       return;
     }
+    // We can still check for image type here for a better UX, even if Cloudinary handles it.
     if (file.type === "image/jpeg" || file.type === "image/png") {
-      const data = new FormData();
-      data.append("file", file);
-      data.append("upload_preset", "Chat-App");
-      
       try {
-        const res = await fetch("https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload", {
-          method: "POST",
-          body: data,
-        });
-        const result = await res.json();
-        setPic(result.secure_url);
+        // Use the centralized and corrected upload function
+        const { url } = await uploadToCloudinary(file);
+        setPic(url);
         toast.success("Image uploaded successfully!");
       } catch (error) {
         toast.error("Error uploading image.");
       }
     } else {
-      toast.error("Please select a JPEG or PNG image.");
+      toast.error("Please select a JPEG or PNG image for your profile.");
     }
     setUploading(false);
   };

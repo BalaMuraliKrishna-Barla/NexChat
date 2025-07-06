@@ -10,7 +10,10 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    const isAuthRoute =
+      error.config.url === "/user/login" || error.config.url === "/user/signup";
+
+    if (error.response && error.response.status === 401 && !isAuthRoute) {
       localStorage.removeItem("userInfo");
       window.location.href = "/";
     }
@@ -18,25 +21,40 @@ api.interceptors.response.use(
   }
 );
 
-export const uploadImage = async (file) => {
+export const uploadToCloudinary = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("upload_preset", "Chat-App"); // Your Cloudinary Upload Preset
+  formData.append("upload_preset", "Chat-App");
 
-  const cloudinaryAPI =
-    "https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload"; // Your Cloudinary URL
+  const cloudinaryAPI = "https://api.cloudinary.com/v1_1/dr8gzltrw/auto/upload";
 
   const response = await fetch(cloudinaryAPI, {
     method: "POST",
     body: formData,
   });
-  if (!response.ok) {
-    throw new Error("Image upload failed");
-  }
-  const result = await response.json();
-  return result.secure_url;
-};
 
+  if (!response.ok) {
+    throw new Error("File upload failed");
+  }
+
+  const result = await response.json();
+
+  // This is the crucial correction logic
+  let correctedUrl = result.secure_url;
+  if (result.resource_type !== "image") {
+    correctedUrl = correctedUrl.replace(
+      "/image/upload/",
+      `/${result.resource_type}/upload/`
+    );
+  }
+
+  // Return an object with all the necessary, correct information
+  return {
+    url: correctedUrl,
+    resourceType: result.resource_type,
+    fileType: file.type, // Also return the browser-detected file type
+  };
+};
 
 // --- User Routes ---
 
@@ -77,7 +95,6 @@ export const accessChat = (userId, token) => {
 
 // --- End - Chat Routes ---
 
-
 // --- Group Chat Routes ---
 
 export const createGroupChat = (groupData, token) => {
@@ -87,13 +104,9 @@ export const createGroupChat = (groupData, token) => {
 };
 
 export const updateGroupDetails = (updateData, token) => {
-  return api.put(
-    "/chat/group/update", // Use the correct, updated route
-    updateData,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    }
-  );
+  return api.put("/chat/group/update", updateData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 };
 
 export const addUserToGroup = (chatId, userId, token) => {
@@ -118,8 +131,6 @@ export const removeUserFromGroup = (chatId, userId, token) => {
 
 // --- End - Group Chat Routes ---
 
-
-
 // --- Message Routes ---
 
 export const fetchMessages = (chatId, token) => {
@@ -134,7 +145,5 @@ export const sendMessage = (messageData, token) => {
 };
 
 // --- End - Message Routes ---
-
-
 
 export default api;

@@ -60,7 +60,14 @@ const Login = () => {
         {loading && <LoaderCircle size={18} className="animate-spin" />}
         {loading ? "Logging in..." : "Login"}
       </button>
-      <ToastContainer position="bottom-center" autoClose={3000} hideProgressBar={false} theme="colored" />
+      <ToastContainer 
+      position="bottom-center"
+      autoClose={1000}
+      hideProgressBar={true}
+      closeOnClick={true}
+      pauseOnHover={false}
+      theme="colored"
+      />
     </form>
   );
 };

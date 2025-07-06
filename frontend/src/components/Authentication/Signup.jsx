@@ -4,28 +4,8 @@ import React, { useState } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
-import { registerUser } from '../../services/api';
+import { registerUser, uploadToCloudinary } from '../../services/api';
 import { LoaderCircle, Eye, EyeOff } from 'lucide-react';
-
-// This helper function can be moved to a utility file later
-const uploadImage = async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'Chat-App'); // Your Cloudinary Upload Preset
-    
-    const cloudinaryAPI = "https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload"; // Your Cloudinary URL
-
-    const response = await fetch(cloudinaryAPI, {
-        method: 'POST',
-        body: formData
-    });
-    if (!response.ok) {
-        throw new Error('Image upload failed');
-    }
-    const result = await response.json();
-    return result.secure_url;
-};
-
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -35,7 +15,6 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
-  // Store the actual file object for later upload
   const [picFile, setPicFile] = useState(null);
   
   const [loading, setLoading] = useState(false);
@@ -44,7 +23,7 @@ export default function Signup() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if(file.size > 2 * 1024 * 1024) { // 2MB limit
+      if(file.size > 2 * 1024 * 1024) {
         toast.error("File is too large. Max size is 2MB.");
         return;
       }
@@ -62,6 +41,20 @@ export default function Signup() {
       setLoading(false);
       return;
     }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address.");
+      setLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters long.");
+      setLoading(false);
+      return;
+    }
+    
     if (password !== confirmPassword) {
       toast.error('Passwords do not match!');
       setLoading(false);
@@ -72,7 +65,7 @@ export default function Signup() {
     if (picFile) {
       try {
         toast.info("Uploading profile picture...");
-        profilePicUrl = await uploadImage(picFile);
+        profilePicUrl = await uploadToCloudinary(picFile);
       } catch (error) {
         toast.error("Image upload failed. Please try again.");
         setLoading(false);

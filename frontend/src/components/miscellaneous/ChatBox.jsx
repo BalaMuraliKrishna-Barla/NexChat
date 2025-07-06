@@ -5,18 +5,29 @@ import { ChatState } from '../../Context/ChatProvider';
 import { toast } from 'react-toastify';
 import { ArrowLeft, ArrowDown, Paperclip, Send, Settings, LoaderCircle, X, Smile } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
-import { fetchMessages, sendMessage } from '../../services/api';
+import { fetchMessages, sendMessage, uploadToCloudinary } from '../../services/api';
 import ScrollableChat from './ScrollableChat';
 import UpdateGroupChatModal from './UpdateGroupChatModal';
-// This is a reference to the currently selected chat, used to avoid a stale state in the socket listener
+
+// A reference to the selected chat object, stored outside the component.
+// This helps prevent issues with stale state inside socket event listeners.
 var selectedChatCompare;
 
-// Helper function to get the other user's full profile from a chat's users array
+/**
+ * A helper function to get the other user's full profile from a chat's users array.
+ * @param {object} loggedUser - The currently logged-in user object.
+ * @param {array} users - The array of users in the chat.
+ * @returns {object} The user object of the other participant in a one-on-one chat.
+ */
 const getSenderFull = (loggedUser, users) => {
   if (!loggedUser || !users || users.length < 2) return null;
   return users[0]?._id === loggedUser?._id ? users[1] : users[0];
 };
 
+/**
+ * The main component for displaying and interacting with a selected chat.
+ * It handles message fetching, sending, real-time updates, and user interactions.
+ */
 const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
   // --- STATE MANAGEMENT ---
   const [messages, setMessages] = useState([]);
@@ -24,40 +35,24 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
   const [newMessage, setNewMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [typing, setTyping] = useState(false);
-  const [fileToPreview, setFileToPreview] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [fileToPreview, setFileToPreview] = useState(null);
+  // NEW: State to control the visibility of the "scroll to bottom" arrow
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   
   // --- REFS ---
   const fileInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
-  const messagesEndRef = useRef(null);
-  const messageContainerRef = useRef(null);
+  const messageContainerRef = useRef(null); // Ref for the scrollable message area
   const textInputRef = useRef(null);
   
-  // --- GLOBAL STATE ---
+  // --- CONTEXT & GLOBAL STATE ---
   const { user, selectedChat, setSelectedChat, typingStatus, theme } = ChatState();
-
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
-  // This useEffect ensures the chat scrolls to the bottom whenever new messages are loaded or sent.
-  useEffect(() => {
-    // A small delay ensures the DOM has updated before we try to scroll.
-    const timer = setTimeout(() => {
-        scrollToBottom();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [messages]);
-
 
   // --- DATA FETCHING & REAL-TIME LOGIC ---
 
-  // Function to load all messages for the selected chat
+  // Fetches all messages for the currently selected chat from the API.
   const loadMessages = async () => {
     if (!selectedChat) return;
     setLoading(true);
@@ -74,42 +69,45 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
     setLoading(false);
   };
 
-  // Effect for loading messages whenever the selected chat changes
+  // This effect runs whenever the selected chat changes, triggering a re-fetch of messages.
   useEffect(() => {
     loadMessages();
-    selectedChatCompare = selectedChat;
+    selectedChatCompare = selectedChat; // Update the comparison object
   }, [selectedChat]);
 
-  // Effect to handle all incoming socket events
+  // This effect sets up and cleans up all socket.io event listeners for real-time updates.
   useEffect(() => {
     if (!socket) return;
 
+    // Listener for new incoming messages
     const messageListener = (newMessageReceived) => {
-      if (!selectedChatCompare || selectedChatCompare._id !== newMessageReceived.chat._id) {
-        // Handle notifications for other chats
-      } else {
+      // If the message is for the currently open chat, append it to the state.
+      // Otherwise, it will be handled as a notification elsewhere.
+      if (selectedChatCompare && selectedChatCompare._id === newMessageReceived.chat._id) {
         setMessages((prev) => [...prev, newMessageReceived]);
         socket.emit("mark as read", { chatId: selectedChatCompare._id, userId: user._id });
       }
-      setFetchAgain(prev => !prev);
+      setFetchAgain(prev => !prev); // Trigger a fetch in MyChats to update latest message
     };
 
+    // Listener to update message status to "read"
     const readListener = ({ chatId }) => {
       if (chatId === selectedChatCompare?._id) {
-        setMessages(prev => prev.map(msg => (msg.sender._id === user._id && !msg.isRead) ? { ...msg, isRead: true } : msg));
+        setMessages(prev => prev.map(msg => ({ ...msg, isRead: true })));
       }
     };
     
     socket.on("message recieved", messageListener);
     socket.on("messages read", readListener);
 
+    // Cleanup function to remove listeners when the component unmounts
     return () => {
       socket.off("message recieved", messageListener);
       socket.off("messages read", readListener);
     };
   }, [socket, fetchAgain, setFetchAgain, user._id]);
   
-  // Close emoji picker if clicked outside
+  // Effect to close the emoji picker when clicking outside of it.
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
@@ -120,7 +118,7 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [emojiPickerRef]);
 
-  // Debounce timer for the "stop typing" event
+  // Effect for the "stop typing" indicator with a 3-second debounce.
   useEffect(() => {
     if (!socket) return;
     const timer = setTimeout(() => {
@@ -134,13 +132,14 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
 
 
   // --- EVENT HANDLERS ---
-  const handleEmojiClick = (emojiObject) => {
-    setNewMessage(prev => prev + emojiObject.emoji);
-  };
-  
+  const handleEmojiClick = (emojiObject) => setNewMessage(prev => prev + emojiObject.emoji);
   const handleFileSelection = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if(file.size > 10 * 1024 * 1024) { // 10MB limit
+        toast.error("File is too large. Max size is 10MB.");
+        return;
+      }
       setFileToPreview(file);
     }
   };
@@ -148,64 +147,30 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
   const handleScroll = () => {
     const container = messageContainerRef.current;
     if (container) {
-      // Check if the user has scrolled up more than a certain amount (e.g., 300 pixels)
-      const isScrolledUp = container.scrollHeight - container.scrollTop > container.clientHeight + 300;
+      const isScrolledUp = container.scrollHeight - container.scrollTop > container.clientHeight + 200;
       setShowScrollToBottom(isScrolledUp);
     }
   };
 
-
-  // This new useEffect is dedicated to refocusing the input after a message is sent.
-  // It watches the `messages` array for changes.
-  useEffect(() => {
-    // We check if the last message was sent by the current user.
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.sender._id === user._id) {
-        // If so, focus the input field.
-        textInputRef.current?.focus();
-      }
-    }
-  }, [messages, user._id]);
-
-  // The main send handler is now cleaner.
+  // Main handler for sending a message (text or file).
   const handleSend = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() && !fileToPreview) return;
-
     socket.emit("stop typing", selectedChat._id);
     setTyping(false);
-    
-    let payload = {
-        chatId: selectedChat._id,
-        parentMessage: replyingTo?._id,
-    };
-
+    let payload = { chatId: selectedChat._id, parentMessage: replyingTo?._id };
     if (fileToPreview) {
         setUploading(true);
-        const formData = new FormData();
-        formData.append('file', fileToPreview);
-        formData.append("upload_preset", "Chat-App");
         try {
-            const res = await fetch("https://api.cloudinary.com/v1_1/dr8gzltrw/auto/upload", { method: 'POST', body: formData });
-            const result = await res.json();
+            const result = await uploadToCloudinary(fileToPreview);
             payload.fileUrl = result.secure_url;
             payload.fileType = fileToPreview.type || result.resource_type;
-        } catch (error) {
-            toast.error("File upload failed.");
-            setUploading(false);
-            return;
-        }
+        } catch (error) { toast.error("File upload failed."); setUploading(false); return; }
     } else {
         payload.content = newMessage;
     }
-
     try {
-        setNewMessage("");
-        setFileToPreview(null);
-        setReplyingTo(null);
-        setUploading(true);
-        
+        setNewMessage(""); setFileToPreview(null); setReplyingTo(null); setUploading(true);
         const { data } = await sendMessage(payload, user.token);
         socket.emit("new message", data);
         setMessages(prev => [...prev, data]);
@@ -216,7 +181,6 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
         setUploading(false);
     }
   };
-
 
   const typingHandler = (e) => {
     setNewMessage(e.target.value);
@@ -234,173 +198,49 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
     <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700">
       {selectedChat ? (
         <>
-          {/* Header */}
+          {/* Section 1: Chat Header */}
           <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setSelectedChat(null)}
-                className="md:hidden p-1 rounded-full hover:bg-gray-100 text-gray-600"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <img
-                src={selectedChat.isGroupChat ? 'https://i.pravatar.cc/150?u=group' : sender?.pic}
-                alt="avatar"
-                className="w-10 h-10 rounded-full object-cover"
-              />
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
-                {selectedChat.isGroupChat ? selectedChat.chatName : sender?.name}
-              </h2>
+              <button onClick={() => setSelectedChat(null)} className="md:hidden p-1 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Back to chats"><ArrowLeft size={20} /></button>
+              <img src={selectedChat.isGroupChat ? (selectedChat.groupIcon || 'https://i.pravatar.cc/150?u=group') : sender?.pic} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">{selectedChat.isGroupChat ? selectedChat.chatName : sender?.name}</h2>
             </div>
-            {selectedChat.isGroupChat && (
-              <UpdateGroupChatModal fetchAgain={fetchAgain} setFetchAgain={setFetchAgain}>
-                <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600">
-                  <Settings size={20} />
-                </button>
-              </UpdateGroupChatModal>
-            )}
+            {selectedChat.isGroupChat && <UpdateGroupChatModal fetchAgain={fetchAgain} setFetchAgain={setFetchAgain}><button className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Group settings"><Settings size={20} /></button></UpdateGroupChatModal>}
           </div>
   
-          {/* Messages Area */}
-          <div className="relative flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
-            {loading ? (
-              <div className="flex justify-center items-center h-full">
-                <LoaderCircle className="w-8 h-8 text-indigo-600 animate-spin" />
-              </div>
-            ) : (
-              <>
-                <ScrollableChat messages={messages} setReplyingTo={setReplyingTo} />
-                <div ref={messagesEndRef} />
-              </>
-            )}
-  
-            {showScrollToBottom && (
-              <button
-                onClick={scrollToBottom}
-                className="absolute bottom-4 right-4 z-10 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-opacity animate-bounce"
-                aria-label="Scroll to bottom"
-              >
-                <ArrowDown size={20} />
-              </button>
-            )}
+          {/* Section 2: Messages Area */}
+          <div ref={messageContainerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto bg-slate-200 dark:bg-slate-900" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='52' height='26' viewBox='0 0 52 26' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.1'%3E%3Cpath d='M10 10c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2zM28 18c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2zM46 10c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2zM10 26c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2zM28 0c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2zM46 26c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")` }}>
+            <div className="dark:bg-slate-900/50 absolute inset-0"></div>
+            <div className="relative z-10 h-full">
+              {loading ? <div className="flex justify-center items-center h-full"><LoaderCircle className="w-8 h-8 text-indigo-600 animate-spin" /></div> : <ScrollableChat messages={messages} setReplyingTo={setReplyingTo} />}
+            </div>
+            {/* NEW: Conditionally rendered scroll-to-bottom arrow */}
+            {showScrollToBottom && <button onClick={() => messageContainerRef.current.scrollTo({ top: messageContainerRef.current.scrollHeight, behavior: 'smooth' })} className="absolute bottom-4 right-4 z-10 p-2 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition-opacity animate-bounce" aria-label="Scroll to bottom"><ArrowDown size={20} /></button>}
           </div>
   
-          {/* Reply / File / Typing + Input */}
+          {/* Section 3: Previews and Indicators */}
           <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 p-2 space-y-2 bg-white dark:bg-slate-800">
-            {/* Reply Preview UI */}
-            {replyingTo && (
-              <div className="bg-gray-100 dark:bg-slate-700 p-2 rounded-lg flex items-center justify-between text-sm">
-                <div className="border-l-4 border-blue-500 pl-3 min-w-0">
-                  <p className="font-bold text-blue-600">
-                    Replying to {replyingTo.sender.name === user.name ? 'yourself' : replyingTo.sender.name}
-                  </p>
-                  <p className="text-gray-600 truncate">{replyingTo.content || 'a file'}</p>
-                </div>
-                <button
-                  onClick={() => setReplyingTo(null)}
-                  className="p-1 text-gray-500 hover:text-red-600 rounded-full"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            )}
-  
-            {/* File Preview UI */}
-            {fileToPreview && (
-              <div className="bg-gray-100 dark:bg-slate-700 p-2 rounded-lg flex items-center justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  {fileToPreview.type.startsWith('image/') ? (
-                    <img
-                      src={URL.createObjectURL(fileToPreview)}
-                      alt="preview"
-                      className="w-10 h-10 rounded-md object-cover"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 bg-gray-200 rounded-md flex items-center justify-center flex-shrink-0">
-                      <Paperclip size={20} className="text-gray-500" />
-                    </div>
-                  )}
-                  <span className="text-sm text-gray-700 truncate">{fileToPreview.name}</span>
-                </div>
-                <button
-                  onClick={() => setFileToPreview(null)}
-                  disabled={uploading}
-                  className="p-1 text-gray-500 hover:text-red-600 rounded-full disabled:opacity-50"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            )}
-  
-            {/* Typing Indicator */}
-            {otherUserIsTyping && (
-              <div className="px-2 text-sm text-slate-500 dark:text-slate-400 italic">typing...</div>
-            )}
-  
-            {/* --- START OF INPUT AREA REDESIGN --- */}
+            {replyingTo && <div className="bg-slate-100 dark:bg-slate-700 p-2 rounded-lg flex items-center justify-between text-sm"><div className="border-l-4 border-indigo-500 pl-3 min-w-0"><p className="font-bold text-indigo-600 dark:text-indigo-400">Replying to {replyingTo.sender.name === user.name ? 'yourself' : replyingTo.sender.name}</p><p className="text-slate-600 dark:text-slate-300 truncate">{replyingTo.content || 'a file'}</p></div><button onClick={() => setReplyingTo(null)} className="p-1 text-slate-400 hover:text-red-500 rounded-full"><X size={18} /></button></div>}
+            {fileToPreview && <div className="bg-slate-100 dark:bg-slate-700 p-2 rounded-lg flex items-center justify-between"><div className="flex items-center gap-2 min-w-0">{fileToPreview.type.startsWith('image/') ? <img src={URL.createObjectURL(fileToPreview)} alt="preview" className="w-10 h-10 rounded-md object-cover"/> : <div className="w-10 h-10 bg-slate-200 dark:bg-slate-600 rounded-md flex items-center justify-center flex-shrink-0"><Paperclip size={20} className="text-slate-500 dark:text-slate-300"/></div>}<span className="text-sm text-slate-700 dark:text-slate-200 truncate">{fileToPreview.name}</span></div><button onClick={() => setFileToPreview(null)} disabled={uploading} className="p-1 text-slate-400 hover:text-red-500 rounded-full disabled:opacity-50"><X size={18} /></button></div>}
+            {otherUserIsTyping && <div className="px-2 text-sm text-slate-500 dark:text-slate-400 italic">typing...</div>}
+          </div>
+
+          {/* Section 4: Input Area */}
+          <div className="p-2 sm:p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <div className="relative flex items-center">
-              {showEmojiPicker && (
-                <div ref={emojiPickerRef} className="absolute bottom-12 z-10">
-                  <EmojiPicker
-                    onEmojiClick={handleEmojiClick}
-                    autoFocusSearch={false}
-                    height={350}
-                    width={300}
-                    theme={theme}
-                  />
-                </div>
-              )}
-  
-              {/* Attach File and Emoji Buttons */}
+              {showEmojiPicker && <div ref={emojiPickerRef} className="absolute bottom-12 z-10"><EmojiPicker onEmojiClick={handleEmojiClick} autoFocusSearch={false} height={350} width={300} theme={theme} /></div>}
               <div className="flex items-center">
-                <input type="file" ref={fileInputRef} onChange={handleFileSelection} className="hidden" />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current.click()}
-                  disabled={uploading}
-                  className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
-                >
-                  {uploading ? <LoaderCircle className="w-5 h-5 animate-spin" /> : <Paperclip size={20} />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
-                >
-                  <Smile size={20} />
-                </button>
+                <input type="file" ref={fileInputRef} onChange={handleFileSelection} className="hidden" accept="image/*,video/*,application/pdf" />
+                <button type="button" onClick={() => fileInputRef.current.click()} disabled={uploading} className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Attach file">{uploading ? <LoaderCircle className="w-5 h-5 animate-spin" /> : <Paperclip size={20} />}</button>
+                <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Open emoji picker"><Smile size={20} /></button>
               </div>
-  
-              {/* The Form for Text Input and Sending */}
               <form onSubmit={handleSend} className="flex-1 ml-2">
                 <div className="relative">
-                  <input
-                    ref={textInputRef}
-                    type="text"
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={typingHandler}
-                    onFocus={() => {
-                      setShowEmojiPicker(false);
-                      if (socket) {
-                        socket.emit('mark as read', { chatId: selectedChat._id, userId: user._id });
-                      }
-                    }}
-                    autoComplete="off"
-                    className="w-full px-4 py-2 pr-12 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-200 border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    disabled={!!fileToPreview || uploading}
-                  />
-                  <button
-                    type="submit"
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-indigo-600 disabled:opacity-50"
-                    disabled={uploading || (!newMessage.trim() && !fileToPreview)}
-                  >
-                    {uploading ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Send size={20} />}
-                  </button>
+                  <input ref={textInputRef} type="text" placeholder="Type a message..." value={newMessage} onChange={typingHandler} onFocus={() => { setShowEmojiPicker(false); if (socket) socket.emit('mark as read', { chatId: selectedChat._id, userId: user._id }); }} autoComplete="off" className="w-full px-4 py-2 pr-12 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-200 border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500" disabled={!!fileToPreview || uploading} />
+                  <button type="submit" className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-indigo-600 disabled:opacity-50" disabled={uploading || (!newMessage.trim() && !fileToPreview)} aria-label="Send message">{uploading ? <LoaderCircle className="w-4 h-4 animate-spin"/> : <Send size={20} />}</button>
                 </div>
               </form>
             </div>
-            {/* --- END OF INPUT AREA REDESIGN --- */}
           </div>
         </>
       ) : (
@@ -411,10 +251,6 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
       )}
     </div>
   );
-  
 };
-
-
-
 
 export default ChatBox;

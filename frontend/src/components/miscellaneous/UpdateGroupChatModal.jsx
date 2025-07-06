@@ -8,7 +8,7 @@ import {
   updateGroupDetails, // Renamed function from AI code
   addUserToGroup,
   removeUserFromGroup,
-  uploadImage,
+  uploadToCloudinary,
 } from '../../services/api';
 import ReusableModal from './ReusableModal';
 import { X, LoaderCircle } from 'lucide-react';
@@ -30,7 +30,7 @@ const UpdateGroupChatModal = ({ fetchAgain, setFetchAgain, children }) => {
     let groupIconUrl;
     if (groupIconFile) {
       try {
-        groupIconUrl = await uploadImage(groupIconFile);
+        groupIconUrl = await uploadToCloudinary(groupIconFile);
       } catch (error) {
         toast.error("Icon upload failed.");
         setUpdateLoading(false);

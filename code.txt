@@ -1,0 +1,3309 @@
+`backend/.env`
+
+```
+PORT = 5000 
+GLOBAL_MONGO_URI = "mongodb+srv://NexChatAdmin:NexChatDB@nexchat.sgspl.mongodb.net/NexChat?retryWrites=true&w=majority&appName=NexChat"
+LOCAL_MONGO_URI = "mongodb://127.0.0.1:27017/ChatAPP?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+2.2.0"
+SECRET_KEY = "abcdefghijklmnopqrstuvwxyz"
+
+CLOUDINARY_URL = "cloudinary://BMK:872239766881888@dr8gzltrw"
+
+REACT_APP_CLOUDINARY_UPLOAD_API = "https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload"```
+
+`backend/config/db.js`
+
+```javascript
+const mongoose = require('mongoose')
+const colors = require('colors')
+
+const connectDB = async() => {    
+    try {
+        const clientLocal = await mongoose.connect(process.env.LOCAL_MONGO_URI)
+        console.log(`LOCAL MongoDB connected : ${clientLocal.connection.host}`.blue.bold);
+
+        // const clientGlobal = await mongoose.connect(process.env.GLOBAL_MONGO_URI)
+        // console.log(`GLOBALMongoDB connected : ${clientGlobal.connection.host}`.green.bold);
+    } catch (error) {
+        console.log(`Mongo Connection Error : ${error.message}`.red.underline);
+        process.exit();
+    }
+}
+
+module.exports = connectDB;
+```
+
+`backend/config/jwt.js`
+
+```javascript
+const jwt = require('jsonwebtoken')
+
+const generateToken = (id) => {
+    const key = process.env.SECRET_KEY;
+    // console.log(key);
+    const token = jwt.sign({ id }, key, { expiresIn:'30d'})
+    return token
+}
+
+module.exports = generateToken
+```
+
+`backend/controllers/chatController.js`
+
+```javascript
+const expressAsyncHandler = require("express-async-handler");
+const Chat = require("./../models/chatModel");
+const User = require("./../models/userModel");
+// This function is for creating or fetching a one-on-one chat
+const accessChat = expressAsyncHandler(async (req, res) => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    console.log("userId param not sent with the request!!");
+    res.status(400);
+    return;
+  }
+  var isChat = await Chat.find({
+    isGroupChat: false,
+    $and: [
+      { users: { $elemMatch: { $eq: req.user._id } } },
+      { users: { $elemMatch: { $eq: userId } } },
+    ],
+  })
+    .populate("users", "-password")
+    .populate("latestMessage");
+
+  isChat = await User.populate(isChat, {
+    path: "latestMessage.sender",
+    select: "name pic email",
+  });
+
+  if (isChat.length > 0) {
+    res.json(isChat[0]);
+  } else {
+    var chatData = {
+      chatName: "sender",
+      isGroupChat: false,
+      users: [req.user._id, userId],
+    };
+    try {
+      const createdChat = await Chat.create(chatData);
+
+      const FullChat = await Chat.find({ _id: createdChat._id }).populate(
+        "users",
+        "-password"
+      );
+
+      res.status(200).send(FullChat);
+    } catch (err) {
+      res.status(400);
+      throw new Error(err.message);
+    }
+  }
+});
+
+const fetchChats = expressAsyncHandler(async (req, res) => {
+  try {
+    const results = await Chat.find({
+      users: { $elemMatch: { $eq: req.user._id } },
+    })
+      .populate("users", "-password")
+      .populate("groupAdmin", "-password")
+      .populate("latestMessage")
+      .sort({ updatedAt: -1 });
+
+    const populatedResults = await User.populate(results, {
+      path: "latestMessage.sender",
+      select: "name pic email",
+    });
+
+    res.status(200).send(populatedResults);
+  } catch (err) {
+    throw new Error(err.message);
+  }
+});
+
+const deleteChat = expressAsyncHandler(async (req, res) => {
+  const { chatId } = req.body;
+
+  // Find the chat and check if it exists
+  const chat = await Chat.findById(chatId);
+
+  if (!chat) {
+    res.status(400);
+    throw new Error("Chat Not Found");
+  }
+
+  // Check if the user is one of the participants
+  if (!chat.users.includes(req.user._id)) {
+    res.status(403);
+    throw new Error("You are not a participant in this chat");
+  }
+
+  try {
+    // Delete the chat
+    await Chat.findByIdAndDelete(chatId);
+
+    res.status(200).json({ message: "Chat deleted successfully" });
+  } catch (err) {
+    res.status(400);
+    throw new Error(err.message);
+  }
+});
+
+const createGroupChat = expressAsyncHandler(async (req, res) => {
+  // The body is already parsed by express.json()
+  if (!req.body.users || !req.body.name) {
+    return res
+      .status(400)
+      .send({ message: "Please provide a name and users for the group" });
+  }
+
+  // 'users' should already be an array
+  var users = req.body.users;
+
+  if (!Array.isArray(users) || users.length < 2) {
+    return res
+      .status(400)
+      .send({ message: "A group chat requires at least 2 other users." });
+  }
+
+  users.push(req.user._id);
+
+  try {
+    const groupChat = await Chat.create({
+      chatName: req.body.name,
+      users: users,
+      isGroupChat: true,
+      groupAdmin: req.user,
+    });
+    // res.status(200).json({mk: groupChat});
+
+    const fullGroupChat = await Chat.findOne({ _id: groupChat._id })
+      .populate("users", "-password")
+      .populate("groupAdmin", "-password");
+
+    res.status(200).json(fullGroupChat);
+  } catch (err) {
+    res.status(400);
+    throw new Error(err.message);
+  }
+});
+
+const updateGroupDetails = expressAsyncHandler(async (req, res) => {
+  const { chatId, chatName, groupIcon } = req.body;
+
+  const updateData = {};
+  if (chatName) updateData.chatName = chatName;
+  if (groupIcon) updateData.groupIcon = groupIcon;
+
+  const updatedChat = await Chat.findByIdAndUpdate(chatId, updateData, {
+    new: true,
+  })
+    .populate("users", "-password")
+    .populate("groupAdmin", "-password");
+
+  if (!updatedChat) {
+    res.status(404);
+    throw new Error("Chat Not Found");
+  } else {
+    res.status(200).json(updatedChat);
+  }
+});
+
+const addToGroup = expressAsyncHandler(async (req, res) => {
+  const { chatId, userId } = req.body;
+  const added = await Chat.findByIdAndUpdate(
+    chatId,
+    { $push: { users: userId } },
+    { new: true }
+  )
+    .populate("users", "-password")
+    .populate("groupAdmin", "-password");
+
+  if (!added) {
+    res.status(400);
+    throw new Error("Chat Not Found");
+  } else {
+    res.status(200).json(added);
+  }
+});
+
+const removeFromGroup = expressAsyncHandler(async (req, res) => {
+  const { chatId, userId } = req.body;
+  const removed = await Chat.findByIdAndUpdate(
+    chatId,
+    { $pull: { users: userId } },
+    { new: true }
+  )
+    .populate("users", "-password")
+    .populate("groupAdmin", "-password");
+
+  if (!removed) {
+    res.status(400);
+    throw new Error("Chat Not Found");
+  } else {
+    res.status(200).json(removed);
+  }
+});
+
+const deleteGroupChat = expressAsyncHandler(async (req, res) => {
+  const { chatId } = req.body;
+
+  // Find the chat and check if it exists
+  const chat = await Chat.findById(chatId);
+
+  if (!chat) {
+    res.status(400);
+    throw new Error("Chat Not Found");
+  }
+
+  // Check if the user is the group admin
+  if (chat.groupAdmin.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("You are not authorized to delete this group chat");
+  }
+
+  try {
+    // Delete the chat
+    await Chat.findByIdAndDelete(chatId);
+
+    res.status(200).json({ message: "Group chat deleted successfully" });
+  } catch (err) {
+    res.status(400);
+    throw new Error(err.message);
+  }
+});
+
+module.exports = {
+  accessChat,
+  fetchChats,
+  deleteChat,
+  createGroupChat,
+  updateGroupDetails,
+  addToGroup,
+  removeFromGroup,
+  deleteGroupChat,
+};
+```
+
+`backend/controllers/messageController.js`
+
+```javascript
+// backend/controllers/messageController.js
+
+const asyncHandler = require("express-async-handler");
+const Message = require("../models/messageModel");
+const User = require("../models/userModel");
+const Chat = require("../models/chatModel");
+
+// sendMessage function remains unchanged.
+const sendMessage = asyncHandler(async (req, res) => {
+  const { content, chatId, fileUrl, fileType, parentMessage } = req.body;
+  if (!chatId || (!content && !fileUrl)) {
+    console.log("Invalid data passed into request");
+    return res.sendStatus(400);
+  }
+
+  var newMessage = {
+    sender: req.user._id,
+    content: content,
+    fileUrl: fileUrl,
+    fileType: fileType,
+    parentMessage: parentMessage,
+    chat: chatId,
+  };
+  
+  try {
+    var message = await Message.create(newMessage);
+    message = await message.populate("sender", "name pic");
+    message = await message.populate("chat");
+    message = await message.populate({
+      path: "parentMessage",
+      populate: { path: "sender", select: "name" },
+    });
+    message = await User.populate(message, {
+      path: "chat.users",
+      select: "name pic email",
+    });
+    await Chat.findByIdAndUpdate(req.body.chatId, { latestMessage: message });
+    res.json(message);
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+// @desc    Get all messages for a chat
+// @route   GET /api/message/:chatId
+// @access  Protected
+const allMessages = asyncHandler(async (req, res) => {
+  try {
+    // FIX: Update logic to use the new 'isRead' flag.
+    // Mark all messages in this chat not sent by the current user as read.
+    await Message.updateMany(
+      { chat: req.params.chatId, sender: { $ne: req.user._id } },
+      { isRead: true }
+    );
+
+    const messages = await Message.find({ chat: req.params.chatId })
+      .populate("sender", "name pic email")
+      .populate("chat")
+      .populate({
+        path: 'parentMessage',
+        populate: { path: 'sender', select: 'name' }
+      });
+
+    res.json(messages);
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
+});
+
+module.exports = { sendMessage, allMessages };
+```
+
+`backend/controllers/userControllers.js`
+
+```javascript
+const asyncHandler = require('express-async-handler')
+const User = require('../models/userModel.js');
+const generateToken = require('../config/jwt.js');
+const bcryptjs = require('bcryptjs')
+
+const hashPassword = asyncHandler(async (password) => {
+    const salt = await bcryptjs.genSalt(10);
+    const hashedPassword = await bcryptjs.hash(password, salt)
+    return hashedPassword;
+});
+
+const registerUser = asyncHandler(async (req, res) => {
+    
+    const {name, email, password, pic} = req.body;
+
+    if(!name || !email || !password) {
+        res.status(400).json({ message: "Please fill in all fields" }); // FIX
+        return;
+    }
+    
+    const userExits = await User.findOne({email})
+    if(userExits) {
+        res.status(400).json({ message: "Email already exists!" }); // FIX
+        return;
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    const user = await User.create({ name, email, password : hashedPassword, pic })
+    
+    if(user) {
+        res.status(201).json({
+            message : `Registration success!`,
+            _id : user._id,
+            name : user.name,
+            email : user.email,
+            pic : user.pic,
+            token : generateToken(user._id)
+        })        
+    } else {
+        res.json({ message: "Failed in creating a user!" });
+        console.log("Registration failed");
+        return;
+    }
+});
+
+const matchPassword = asyncHandler(async(pass, hashedPass) => 
+    await bcryptjs.compare(pass, hashedPass)
+);
+
+const authUser = asyncHandler(async (req, res) => {
+    const { email, password} = req.body;
+
+    const validUser = await User.findOne({email})
+    if(!validUser) 
+        res.json({message: "User not exists!"});
+    
+    const isMatched = await matchPassword(password, validUser.password);
+    if (isMatched) {
+      res.status(200).json({
+        _id: validUser._id,
+        name: validUser.name,
+        email: validUser.email,
+        pic: validUser.pic,
+        token: generateToken(validUser._id),
+      });
+    } else {
+      res.status(401).json({ message: "Invalid Email or Password" });
+    }
+});
+
+
+const getAllUsers = asyncHandler(async (req, res) => {
+    // building a query to search users when provided the search variable 
+    const keyword = req.query.search
+    ? {
+            $or: [
+                { name: { $regex: req.query.search, $options: 'i' } },
+                { email: { $regex: req.query.search, $options: 'i' } }
+            ]
+    } : {}; // if not then the query empty
+
+    let currentUserId = req.user._id;
+    console.log(await User.find({_id: {$eq: currentUserId}}));
+    
+    // finding all the users except the current user 
+    const users = await User.find(keyword).find({ _id: { $ne: currentUserId }});
+    
+    res.send(users);
+    
+});
+
+
+const updateUserProfile = asyncHandler(async (req, res) => {
+  const { name, pic } = req.body;
+
+  const user = await User.findById(req.user._id);
+
+  if (user) {
+    user.name = name || user.name;
+    user.pic = pic || user.pic;
+
+    const updatedUser = await user.save();
+
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      pic: updatedUser.pic,
+      token: generateToken(updatedUser._id), // Re-issue token in case payload has info
+    });
+  } else {
+    res.status(404);
+    throw new Error("User not found");
+  }
+});
+
+
+module.exports = { registerUser, authUser, getAllUsers, updateUserProfile }```
+
+`backend/middleware/authMiddleware.js`
+
+```javascript
+const jwt = require('jsonwebtoken')
+const User = require('../models/userModel')
+const asyncHandler = require('express-async-handler')
+
+const protect = asyncHandler( async (req, res, next) => {
+    let token;
+    if(req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        try { // req.headers.authorization : Bearer abcdef...
+            token = req.headers.authorization.split(" ")[1]; // abcdefgh... 
+            const decoded = jwt.verify(token, process.env.SECRET_KEY); 
+            
+            req.user = await User.findById(decoded.id).select("-password");
+
+            next();
+        } catch (err) {
+            res.status(401);
+            throw new Error("Something wrong");
+        }
+    }
+
+    if(!token) {
+        res.status(401);
+        throw new Error("No token exists!");
+    }
+});
+
+module.exports = { protect };```
+
+`backend/models/chatModel.js`
+
+```javascript
+const mongoose = require('mongoose')
+
+const chatModel = mongoose.Schema(
+  {
+    chatName: {
+      type: String,
+      trim: true,
+    },
+    isGroupChat: {
+      type: Boolean,
+      default: false,
+    },
+    groupIcon: { type: String },
+    users: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    latestMessage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+    },
+    groupAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  },
+  { timestamps: true }
+);
+
+const Chat = mongoose.model("Chat", chatModel)
+
+module.exports = Chat;```
+
+`backend/models/messageModel.js`
+
+```javascript
+// backend/models/messageModel.js
+const mongoose = require("mongoose");
+
+const messageModel = mongoose.Schema(
+  {
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    content: { type: String, trim: true }, // Text content, now optional
+    fileUrl: { type: String }, // URL of the uploaded file
+    fileType: { type: String }, // e.g., 'image/png', 'application/pdf'
+    chat: { type: mongoose.Schema.Types.ObjectId, ref: "Chat" },
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
+    parentMessage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+    },
+  },
+  { timestamps: true }
+);
+
+const Message = mongoose.model("Message", messageModel);
+module.exports = Message;```
+
+`backend/models/userModel.js`
+
+```javascript
+const mongoose = require('mongoose')
+
+const userModel = mongoose.Schema({
+  name: { 
+    type: String, 
+    required: true 
+  },
+  email: { 
+    type: String, 
+    required: true, 
+    unique : true 
+  },
+  password: { 
+    type: String, 
+    required: true 
+  },
+  pic: {
+    type: String,
+    default:
+      "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg",
+  },
+}, { timestamps : true });
+
+const User = mongoose.model("User", userModel)
+
+module.exports = User;```
+
+`backend/routes/chatRoutes.js`
+
+```javascript
+const express = require("express");
+const {
+  accessChat,
+  fetchChats,
+  createGroupChat,
+  addToGroup,
+  removeFromGroup,
+  deleteGroupChat,
+  deleteChat,
+  updateGroupDetails,
+} = require("../controllers/chatController");
+const { protect } = require("../middleware/authMiddleWare");
+const router = express.Router();
+
+router.route("/").post(protect, accessChat);
+router.route("/").get(protect, fetchChats);
+router.route("/delete-chat").delete(protect, deleteChat);
+
+router.route("/group").post(protect, createGroupChat);
+router.route("/group/update").put(protect, updateGroupDetails);
+router.route("/delete-group").delete(protect, deleteGroupChat);
+
+router.route("/add-to-group").put(protect, addToGroup);
+router.route("/remove-from-group").put(protect, removeFromGroup);
+
+module.exports = router;
+```
+
+`backend/routes/messageRoutes.js`
+
+```javascript
+const express = require("express");
+const { sendMessage, allMessages } = require("../controllers/messageController");
+const { protect } = require("../middleware/authMiddleWare.js");
+
+const router = express.Router();
+
+router.route("/").post(protect, sendMessage);
+router.route("/:chatId").get(protect, allMessages);
+
+module.exports = router;```
+
+`backend/routes/userRoutes.js`
+
+```javascript
+const express = require('express');
+const {
+  registerUser,
+  authUser,
+  getAllUsers,
+  updateUserProfile,
+} = require("../controllers/userControllers.js");
+// const chats = require("./backend/chats");
+const { protect } = require('../middleware/authMiddleWare.js');
+const router = express.Router()
+
+router.post('/signup', registerUser);
+router.post('/login', authUser);
+// router.get('/chats', chats)
+router.get('/', protect, getAllUsers);
+router.put("/profile", protect, updateUserProfile);
+
+module.exports = router;```
+
+`backend/server.js`
+
+```javascript
+// backend/server.js
+
+const express = require("express");
+const http = require("http");
+const dotenv = require("dotenv");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const path = require("path");
+const connectDB = require("./config/db");
+const userRoutes = require("./routes/userRoutes.js");
+const chatRoutes = require("./routes/chatRoutes.js");
+const messageRoutes = require("./routes/messageRoutes.js");
+const Message = require("./models/messageModel");
+
+dotenv.config();
+connectDB();
+
+const app = express();
+app.use(express.json());
+
+// --- Security & API Setup ---
+app.use(helmet());
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api", limiter);
+app.use("/api/user", userRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/message", messageRoutes);
+
+// --- Deployment Logic ---
+const __dirname1 = path.resolve();
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname1, "/frontend/build")));
+  app.get("*", (req, res) => {
+    res.sendFile(path.resolve(__dirname1, "frontend", "build", "index.html"));
+  });
+} else {
+  app.get("/", (req, res) => {
+    res.send("API is running for Development!");
+  });
+}
+
+const port = process.env.PORT || 5000;
+const server = http.createServer(app);
+server.listen(
+  port,
+  console.log(`Server is listening on Port: ${port}`.white.bold)
+);
+
+// --- Socket.IO Setup ---
+const io = require("socket.io")(server, {
+  pingTimeout: 60000,
+  cors: {
+    origin: "http://localhost:3000",
+  },
+});
+
+let onlineUsers = {};
+
+io.on("connection", (socket) => {
+  console.log("Connected to socket.io", socket.id);
+
+  socket.on("setup", (userData) => {
+    socket.join(userData._id);
+    onlineUsers[userData._id] = socket.id;
+    io.emit("online users", Object.keys(onlineUsers));
+    socket.emit("connected");
+  });
+
+  socket.on("join chat", (room) => {
+    socket.join(room);
+    console.log("User Joined Room: " + room);
+  });
+
+  // FIX: REMOVED THE DUPLICATE AND INCORRECT HANDLERS.
+  // These are the only, and correct, versions.
+  socket.on("typing", (room) => socket.in(room).emit("typing", room));
+  socket.on("stop typing", (room) => socket.in(room).emit("stop typing", room));
+
+  socket.on("new message", (newMessageRecieved) => {
+    var chat = newMessageRecieved.chat;
+    if (!chat.users) return console.log("chat.users not defined");
+    chat.users.forEach((user) => {
+      if (user._id == newMessageRecieved.sender._id) return;
+      socket.in(user._id).emit("message recieved", newMessageRecieved);
+    });
+  });
+
+  socket.on("mark as read", async ({ chatId, userId }) => {
+    try {
+      await Message.updateMany(
+        { chat: chatId, sender: { $ne: userId } },
+        { isRead: true }
+      );
+      socket.in(chatId).emit("messages read", { chatId });
+    } catch (error) {
+      console.log("Error marking messages as read:", error);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("USER DISCONNECTED", socket.id);
+    for (const userId in onlineUsers) {
+      if (onlineUsers[userId] === socket.id) {
+        delete onlineUsers[userId];
+        break;
+      }
+    }
+    io.emit("online users", Object.keys(onlineUsers));
+  });
+});
+```
+
+`code.txt`
+
+```
+```
+
+`frontend/postcss.config.js`
+
+```javascript
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+```
+
+`frontend/public/index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Web site created using create-react-app"
+    />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet" />
+    <title>React App</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <div id="modal-portal"></div>
+
+  </body>
+</html>
+```
+
+`frontend/src/App.jsx`
+
+```javascript
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import ChatsPage from "./pages/ChatsPage";
+import ChatProvider from './Context/ChatProvider';
+import LandingPage from "./pages/LandingPage";
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+
+const App = () => {
+  return (
+    <BrowserRouter>
+      <ChatProvider>
+        <Routes>
+          <Route path="/" Component={ LandingPage } />
+          {/* <Route path="/auth" Component={ HomePage } /> */}
+          <Route path="/chats" Component={ ChatsPage } />
+        </Routes>
+        <ToastContainer 
+          position="bottom-center"
+          autoClose={1000}
+          hideProgressBar={true}
+          closeOnClick={true}
+          pauseOnHover={false}
+          theme="colored"
+        />      
+      </ChatProvider>
+    </BrowserRouter>
+  );
+};
+
+export default App;
+```
+
+`frontend/src/components/Authentication/Auth.jsx`
+
+```javascript
+// frontend/src/components/Authentication/Auth.jsx
+// This file was previously HomePage.jsx
+
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChatState } from '../../Context/ChatProvider';
+import Login from './Login';
+import Signup from './Signup';
+const Auth = ({ initialTab = 'login', authTheme }) => {
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const navigate = useNavigate();
+  const { setTheme } = ChatState();
+
+  const handleAuthSuccess = (userData) => {
+    setTheme(authTheme); 
+    localStorage.setItem('userInfo', JSON.stringify(userData));
+    navigate('/chats');
+  };
+
+  const tabButtonClasses = (tabName) => 
+    `w-full py-2.5 text-sm font-medium rounded-lg focus:outline-none transition-colors duration-200 ${
+      activeTab === tabName 
+        ? 'bg-indigo-600 text-white shadow' 
+        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+    }`;
+
+  return (
+    <div className="w-full">
+        <div className="flex p-1 mb-4 space-x-1 bg-slate-100 dark:bg-slate-900 rounded-xl">
+            <button onClick={() => setActiveTab('login')} className={tabButtonClasses('login')}>
+                Login
+            </button>
+            <button onClick={() => setActiveTab('signup')} className={tabButtonClasses('signup')}>
+                Signup
+            </button>
+        </div>
+        <div>
+            {activeTab === 'login' ? <Login onAuthSuccess={handleAuthSuccess} /> : <Signup onAuthSuccess={handleAuthSuccess} />}
+        </div>
+    </div>
+  );
+};
+
+export default Auth;```
+
+`frontend/src/components/Authentication/Login.jsx`
+
+```javascript
+// frontend/src/components/Authentication/Login.jsx
+import React, { useState } from 'react';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { useNavigate } from 'react-router-dom';
+import { loginUser } from '../../services/api'; 
+import { LoaderCircle } from 'lucide-react';
+
+const Login = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleFormSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    if (!email || !password) {
+      toast.warning("Please fill all the fields!");
+      setLoading(false);
+      return;
+    }
+    try {
+      const { data } = await loginUser(email, password);
+      toast.success("Login success!");
+      localStorage.setItem('userInfo', JSON.stringify(data));
+      navigate('/chats');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleFormSubmit} className="space-y-6">
+      <input
+        id="email-login"
+        type="email"
+        placeholder="Email Address"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-2 border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+      />
+      <input
+        id="password-login"
+        type="password"
+        placeholder="Password"
+        required
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-2 border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+      />
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full flex justify-center items-center gap-2 py-2.5 px-4 bg-brand-primary text-white font-semibold rounded-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary dark:focus:ring-offset-slate-800 disabled:opacity-50"
+      >
+        {loading && <LoaderCircle size={18} className="animate-spin" />}
+        {loading ? "Logging in..." : "Login"}
+      </button>
+      <ToastContainer 
+      position="bottom-center"
+      autoClose={1000}
+      hideProgressBar={true}
+      closeOnClick={true}
+      pauseOnHover={false}
+      theme="colored"
+      />
+    </form>
+  );
+};
+
+export default Login;```
+
+`frontend/src/components/Authentication/Signup.jsx`
+
+```javascript
+// frontend/src/components/Authentication/Signup.jsx
+
+import React, { useState } from 'react';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { useNavigate } from 'react-router-dom';
+import { registerUser, uploadToCloudinary } from '../../services/api';
+import { LoaderCircle, Eye, EyeOff } from 'lucide-react';
+
+export default function Signup() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  const [picFile, setPicFile] = useState(null);
+  
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if(file.size > 2 * 1024 * 1024) {
+        toast.error("File is too large. Max size is 2MB.");
+        return;
+      }
+      setPicFile(file);
+      toast.info(`Selected file: ${file.name}`);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    if (!name || !email || !password || !confirmPassword) {
+      toast.warn('Please fill all fields!');
+      setLoading(false);
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address.");
+      setLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters long.");
+      setLoading(false);
+      return;
+    }
+    
+    if (password !== confirmPassword) {
+      toast.error('Passwords do not match!');
+      setLoading(false);
+      return;
+    }
+
+    let profilePicUrl = "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg";
+    if (picFile) {
+      try {
+        toast.info("Uploading profile picture...");
+        profilePicUrl = await uploadToCloudinary(picFile);
+      } catch (error) {
+        toast.error("Image upload failed. Please try again.");
+        setLoading(false);
+        return;
+      }
+    }
+    
+    try {
+      const { data } = await registerUser({ name, email, password, pic: profilePicUrl });
+      toast.success('Registration successful! Redirecting...');
+      localStorage.setItem("userInfo", JSON.stringify(data));
+      navigate('/chats');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Registration failed.');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <input 
+        type="text" 
+        placeholder="Your Name" 
+        required 
+        onChange={(e) => setName(e.target.value)} 
+        className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-2 border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+      />
+      <input 
+        type="email" 
+        placeholder="Email Address" 
+        required 
+        onChange={(e) => setEmail(e.target.value)} 
+        className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-2 border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+      />
+      <div className="relative">
+        <input 
+          type={showPassword ? "text" : "password"} 
+          placeholder="Password" 
+          required 
+          onChange={(e) => setPassword(e.target.value)} 
+          className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-2 border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+        />
+        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+          {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+        </button>
+      </div>
+      <div className="relative">
+        <input 
+          type={showConfirmPassword ? "text" : "password"} 
+          placeholder="Confirm Password" 
+          required 
+          onChange={(e) => setConfirmPassword(e.target.value)} 
+          className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-2 border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+        />
+        <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+          {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+        </button>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400">Profile Photo (Optional)</label>
+        <input 
+          type="file" 
+          accept="image/*" 
+          onChange={handleFileChange} 
+          className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 dark:file:bg-indigo-900/50 file:text-indigo-700 dark:file:text-indigo-300 hover:file:bg-indigo-100 dark:hover:file:bg-indigo-800/50"
+        />
+      </div>
+      <button 
+        type="submit" 
+        disabled={loading} 
+        className="w-full flex justify-center items-center gap-2 py-2.5 px-4 bg-brand-primary text-white font-semibold rounded-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary disabled:opacity-50"
+      >
+        {loading && <LoaderCircle size={18} className="animate-spin" />}
+        {loading ? "Signing up..." : "Signup"}
+      </button>
+      <ToastContainer position="bottom-center" autoClose={3000} hideProgressBar={false} theme="colored" />
+    </form>
+  );
+}```
+
+`frontend/src/components/Chats/Header.jsx`
+
+```javascript
+// frontend/src/components/Chats/Header.jsx
+
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from "react-router-dom";
+import { ChatState } from "../../Context/ChatProvider";
+import SideDrawer from "../miscellaneous/SideDrawer";
+import ProfileModal from "../miscellaneous/ProfileModal";
+import ThemeToggle from '../miscellaneous/ThemeToggle'; // Import the new component
+
+const Header = () => {
+  const navigate = useNavigate();
+  const { user } = ChatState();
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
+  
+  const handleLogout = () => {
+    localStorage.removeItem("userInfo");
+    navigate("/");
+  };
+
+  // Effect to close the profile dropdown when clicking outside of it
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [profileMenuRef]);
+
+  return (
+    <header className="fixed top-0 left-0 right-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-b border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between h-16 px-4">
+        <SideDrawer /> 
+        
+        <div 
+          className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer" 
+          onClick={() => navigate('/chats')}
+        >
+          NexChat
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          
+          <div className="relative" ref={profileMenuRef}>
+            <button 
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} 
+              className="block rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-slate-100 dark:focus:ring-offset-slate-900"
+            >
+              <img src={user?.pic} alt={user?.name} className="w-10 h-10 rounded-full object-cover" />
+            </button>
+            
+            {/* Profile Dropdown Menu */}
+            {isProfileMenuOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg py-1 z-30 border border-slate-200 dark:border-slate-700">
+                <ProfileModal>
+                  <button className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none">
+                    My Profile
+                  </button>
+                </ProfileModal>
+                <div className="border-t border-slate-100 dark:border-slate-700"></div>
+                <button 
+                  onClick={handleLogout} 
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default Header;```
+
+`frontend/src/components/miscellaneous/ChatBox.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/ChatBox.jsx
+
+import React, { useEffect, useState, useRef } from 'react';
+import { ChatState } from '../../Context/ChatProvider';
+import { toast } from 'react-toastify';
+import { ArrowLeft, ArrowDown, Paperclip, Send, Settings, LoaderCircle, X, Smile } from 'lucide-react';
+import EmojiPicker from 'emoji-picker-react';
+import { fetchMessages, sendMessage, uploadToCloudinary  } from '../../services/api';
+import ScrollableChat from './ScrollableChat';
+import UpdateGroupChatModal from './UpdateGroupChatModal';
+// This is a reference to the currently selected chat, used to avoid a stale state in the socket listener
+var selectedChatCompare;
+
+// Helper function to get the other user's full profile from a chat's users array
+const getSenderFull = (loggedUser, users) => {
+  if (!loggedUser || !users || users.length < 2) return null;
+  return users[0]?._id === loggedUser?._id ? users[1] : users[0];
+};
+
+const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
+  // --- STATE MANAGEMENT ---
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [newMessage, setNewMessage] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [fileToPreview, setFileToPreview] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  
+  // --- REFS ---
+  const fileInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const messageContainerRef = useRef(null);
+  const textInputRef = useRef(null);
+  
+  // --- GLOBAL STATE ---
+  const { user, selectedChat, setSelectedChat, typingStatus, theme } = ChatState();
+
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  // This useEffect ensures the chat scrolls to the bottom whenever new messages are loaded or sent.
+  useEffect(() => {
+    // A small delay ensures the DOM has updated before we try to scroll.
+    const timer = setTimeout(() => {
+        scrollToBottom();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [messages]);
+
+
+  // --- DATA FETCHING & REAL-TIME LOGIC ---
+
+  // Function to load all messages for the selected chat
+  const loadMessages = async () => {
+    if (!selectedChat) return;
+    setLoading(true);
+    try {
+      const { data } = await fetchMessages(selectedChat._id, user.token);
+      setMessages(data);
+      if(socket) {
+        socket.emit("join chat", selectedChat._id);
+        socket.emit("mark as read", { chatId: selectedChat._id, userId: user._id });
+      }
+    } catch (error) { 
+      toast.error("Failed to Load Messages");
+    }
+    setLoading(false);
+  };
+
+  // Effect for loading messages whenever the selected chat changes
+  useEffect(() => {
+    loadMessages();
+    selectedChatCompare = selectedChat;
+  }, [selectedChat]);
+
+  // Effect to handle all incoming socket events
+  useEffect(() => {
+    if (!socket) return;
+
+    const messageListener = (newMessageReceived) => {
+      if (!selectedChatCompare || selectedChatCompare._id !== newMessageReceived.chat._id) {
+        // Handle notifications for other chats
+      } else {
+        setMessages((prev) => [...prev, newMessageReceived]);
+        socket.emit("mark as read", { chatId: selectedChatCompare._id, userId: user._id });
+      }
+      setFetchAgain(prev => !prev);
+    };
+
+    const readListener = ({ chatId }) => {
+      if (chatId === selectedChatCompare?._id) {
+        setMessages(prev => prev.map(msg => (msg.sender._id === user._id && !msg.isRead) ? { ...msg, isRead: true } : msg));
+      }
+    };
+    
+    socket.on("message recieved", messageListener);
+    socket.on("messages read", readListener);
+
+    return () => {
+      socket.off("message recieved", messageListener);
+      socket.off("messages read", readListener);
+    };
+  }, [socket, fetchAgain, setFetchAgain, user._id]);
+  
+  // Close emoji picker if clicked outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [emojiPickerRef]);
+
+  // Debounce timer for the "stop typing" event
+  useEffect(() => {
+    if (!socket) return;
+    const timer = setTimeout(() => {
+      if (typing) {
+        socket.emit("stop typing", selectedChat._id);
+        setTyping(false);
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [newMessage, socket, typing, selectedChat]);
+
+
+  // --- EVENT HANDLERS ---
+  const handleEmojiClick = (emojiObject) => {
+    setNewMessage(prev => prev + emojiObject.emoji);
+  };
+  
+  const handleFileSelection = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setFileToPreview(file);
+    }
+  };
+  
+  const handleScroll = () => {
+    const container = messageContainerRef.current;
+    if (container) {
+      // Check if the user has scrolled up more than a certain amount (e.g., 300 pixels)
+      const isScrolledUp = container.scrollHeight - container.scrollTop > container.clientHeight + 300;
+      setShowScrollToBottom(isScrolledUp);
+    }
+  };
+
+
+  // This new useEffect is dedicated to refocusing the input after a message is sent.
+  // It watches the `messages` array for changes.
+  useEffect(() => {
+    // We check if the last message was sent by the current user.
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.sender._id === user._id) {
+        // If so, focus the input field.
+        textInputRef.current?.focus();
+      }
+    }
+  }, [messages, user._id]);
+
+  // The main send handler is now cleaner.
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() && !fileToPreview) return;
+
+    socket.emit("stop typing", selectedChat._id);
+    setTyping(false);
+    
+    let payload = {
+        chatId: selectedChat._id,
+        parentMessage: replyingTo?._id,
+    };
+
+    if (fileToPreview) {
+        setUploading(true);
+        try {
+            // Use the centralized and corrected upload function
+            const { url, fileType } = await uploadToCloudinary(fileToPreview);
+            payload.fileUrl = url;
+            payload.fileType = fileType;
+        } catch (error) {
+            toast.error("File upload failed.");
+            setUploading(false);
+            return;
+        }
+    }
+    
+    if (!fileToPreview) {
+        payload.content = newMessage;
+    }
+
+    try {
+        setNewMessage("");
+        setFileToPreview(null);
+        setReplyingTo(null);
+        setUploading(true);
+        
+        const { data } = await sendMessage(payload, user.token);
+        socket.emit("new message", data);
+        setMessages(prev => [...prev, data]);
+        setFetchAgain(prev => !prev);
+    } catch (error) {
+        toast.error("Failed to send message.");
+    } finally {
+        setUploading(false);
+    }
+};
+
+
+  const typingHandler = (e) => {
+    setNewMessage(e.target.value);
+    if (!socket || !!fileToPreview) return;
+    if (!typing) {
+      setTyping(true);
+      socket.emit("typing", selectedChat._id);
+    }
+  };
+
+  const sender = getSenderFull(user, selectedChat?.users);
+  const otherUserIsTyping = typingStatus[selectedChat?._id];
+
+  return (
+    <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700">
+      {selectedChat ? (
+        <>
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedChat(null)}
+                className="md:hidden p-1 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                aria-label="Back to chats"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <img
+                src={selectedChat.isGroupChat ? (selectedChat.groupIcon || 'https://i.pravatar.cc/150?u=group') : sender?.pic}
+                alt="avatar"
+                className="w-10 h-10 rounded-full object-cover"
+              />
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                {selectedChat.isGroupChat ? selectedChat.chatName : sender?.name}
+              </h2>
+            </div>
+            {selectedChat.isGroupChat && (
+              <UpdateGroupChatModal fetchAgain={fetchAgain} setFetchAgain={setFetchAgain}>
+                <button className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Group settings">
+                  <Settings size={20} />
+                </button>
+              </UpdateGroupChatModal>
+            )}
+          </div>
+  
+          {/* Messages Area with Wallpaper */}
+          <div 
+            ref={messageContainerRef}
+            onScroll={handleScroll}
+            className="relative flex-1 overflow-y-auto bg-slate-200 dark:bg-slate-900"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='52' height='26' viewBox='0 0 52 26' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.1'%3E%3Cpath d='M10 10c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2zM28 18c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2zM46 10c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2zM10 26c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2zM28 0c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2zM46 26c0-2.21-1.79-4-4-4-3.314 0-6-2.686-6-6h2c0 2.21 1.79 4 4 4 3.314 0 6 2.686 6 6h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            }}
+          >
+            <div className="dark:bg-slate-900/50 absolute inset-0"></div>
+            <div className="relative z-10 h-full">
+              {loading ? 
+                <div className="flex justify-center items-center h-full"><LoaderCircle className="w-8 h-8 text-indigo-600 animate-spin" /></div> 
+                : <>
+                    <ScrollableChat messages={messages} setReplyingTo={setReplyingTo} />
+                    <div ref={messagesEndRef} />
+                  </>
+              }
+            </div>
+            
+            {showScrollToBottom && (
+                <button 
+                    onClick={scrollToBottom}
+                    className="absolute bottom-4 right-4 z-10 p-2 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition-opacity animate-bounce"
+                    aria-label="Scroll to bottom"
+                >
+                    <ArrowDown size={20} />
+                </button>
+            )}
+          </div>
+  
+          {/* All Previews and Indicators Container */}
+          <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 p-2 space-y-2 bg-white dark:bg-slate-800">
+            {replyingTo && (
+              <div className="bg-slate-100 dark:bg-slate-700 p-2 rounded-lg flex items-center justify-between text-sm">
+                <div className="border-l-4 border-indigo-500 pl-3 min-w-0">
+                  <p className="font-bold text-indigo-600 dark:text-indigo-400">
+                    Replying to {replyingTo.sender.name === user.name ? 'yourself' : replyingTo.sender.name}
+                  </p>
+                  <p className="text-slate-600 dark:text-slate-300 truncate">{replyingTo.content || 'a file'}</p>
+                </div>
+                <button onClick={() => setReplyingTo(null)} className="p-1 text-slate-400 hover:text-red-500 rounded-full">
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+  
+            {fileToPreview && (
+              <div className="bg-slate-100 dark:bg-slate-700 p-2 rounded-lg flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  {fileToPreview.type.startsWith('image/') ? (
+                    <img src={URL.createObjectURL(fileToPreview)} alt="preview" className="w-10 h-10 rounded-md object-cover"/>
+                  ) : (
+                    <div className="w-10 h-10 bg-slate-200 dark:bg-slate-600 rounded-md flex items-center justify-center flex-shrink-0"><Paperclip size={20} className="text-slate-500 dark:text-slate-300"/></div>
+                  )}
+                  <span className="text-sm text-slate-700 dark:text-slate-200 truncate">{fileToPreview.name}</span>
+                </div>
+                <button onClick={() => setFileToPreview(null)} disabled={uploading} className="p-1 text-slate-400 hover:text-red-500 rounded-full disabled:opacity-50">
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+  
+            {otherUserIsTyping && (
+              <div className="px-2 text-sm text-slate-500 dark:text-slate-400 italic">typing...</div>
+            )}
+          </div>
+
+          {/* Input Area */}
+          <div className="p-2 sm:p-4 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <div className="relative flex items-center">
+              {showEmojiPicker && (
+                <div ref={emojiPickerRef} className="absolute bottom-12 z-10">
+                  <EmojiPicker onEmojiClick={handleEmojiClick} autoFocusSearch={false} height={350} width={300} theme={theme} />
+                </div>
+              )}
+  
+              {/* Attach File and Emoji Buttons */}
+              <div className="flex items-center">
+                <input type="file" ref={fileInputRef} onChange={handleFileSelection} className="hidden" />
+                <button type="button" onClick={() => fileInputRef.current.click()} disabled={uploading} className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Attach file">
+                  {uploading ? <LoaderCircle className="w-5 h-5 animate-spin" /> : <Paperclip size={20} />}
+                </button>
+                <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Open emoji picker">
+                  <Smile size={20} />
+                </button>
+              </div>
+  
+              {/* The Form for Text Input and Sending */}
+              <form onSubmit={handleSend} className="flex-1 ml-2">
+                <div className="relative">
+                  <input
+                    ref={textInputRef}
+                    type="text"
+                    placeholder="Type a message..."
+                    value={newMessage}
+                    onChange={typingHandler}
+                    onFocus={() => { setShowEmojiPicker(false); if (socket) socket.emit('mark as read', { chatId: selectedChat._id, userId: user._id }); }}
+                    autoComplete="off"
+                    className="w-full px-4 py-2 pr-12 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-200 border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={!!fileToPreview || uploading}
+                  />
+                  <button
+                    type="submit"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-indigo-600 disabled:opacity-50"
+                    disabled={uploading || (!newMessage.trim() && !fileToPreview)}
+                    aria-label="Send message"
+                  >
+                    {uploading ? <LoaderCircle className="w-4 h-4 animate-spin"/> : <Send size={20} />}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-xl">
+          <h3 className="text-xl font-medium">Select a conversation</h3>
+          <p className="max-w-xs">Start a new chat by searching for a user, or continue an existing conversation.</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ChatBox;```
+
+`frontend/src/components/miscellaneous/GroupChatModal.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/GroupChatModal.jsx
+
+import React, { useState } from 'react';
+import { toast } from 'react-toastify';
+import { ChatState } from '../../Context/ChatProvider';
+import { searchUsers, createGroupChat } from '../../services/api';
+import ReusableModal from './ReusableModal';
+import { X, LoaderCircle } from 'lucide-react';
+
+const GroupChatModal = ({ children }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [groupChatName, setGroupChatName] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [search, setSearch] = useState('');
+  const [searchResult, setSearchResult] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
+
+  const { user, chats, setChats } = ChatState();
+
+  const handleSearch = async (query) => {
+    setSearch(query);
+    if (!query) return;
+    setLoading(true);
+    try {
+      const { data } = await searchUsers(query, user.token);
+      setSearchResult(data);
+    } catch (error) { toast.error('Failed to load search results'); } 
+    finally { setLoading(false); }
+  };
+
+  const handleAddUser = (userToAdd) => {
+    if (selectedUsers.some(u => u._id === userToAdd._id)) {
+      toast.warn('User already added');
+      return;
+    }
+    setSelectedUsers([...selectedUsers, userToAdd]);
+  };
+
+  const handleRemoveUser = (userToRemove) => {
+    setSelectedUsers(selectedUsers.filter(u => u._id !== userToRemove._id));
+  };
+
+  const handleSubmit = async () => {
+    if (!groupChatName || selectedUsers.length < 2) {
+      toast.warn('Please provide a group name and add at least 2 users.');
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      const userIds = selectedUsers.map(u => u._id);
+      const { data } = await createGroupChat({ name: groupChatName, users: userIds }, user.token);
+      setChats([data, ...chats]);
+      handleClose(); // Close and reset state
+      toast.success('New group chat created!');
+    } catch (error) {
+      toast.error('Failed to create group chat');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+  
+  const handleClose = () => {
+    setIsOpen(false);
+    setGroupChatName('');
+    setSelectedUsers([]);
+    setSearch('');
+    setSearchResult([]);
+  };
+
+  return (
+    <>
+      <div onClick={() => setIsOpen(true)}>{children}</div>
+      
+      <ReusableModal
+        isOpen={isOpen}
+        onClose={handleClose}
+        title="Create a New Group"
+        footer={
+          <button onClick={handleSubmit} disabled={submitLoading} className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400">
+            {submitLoading ? 'Creating...' : 'Create Chat'}
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          <input 
+            type="text" 
+            placeholder="Group Chat Name" 
+            onChange={(e) => setGroupChatName(e.target.value)} 
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input 
+            type="text" 
+            placeholder="Add users e.g. John, Pavan" 
+            onChange={(e) => handleSearch(e.target.value)} 
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          
+          <div className="flex flex-wrap gap-2 min-h-[40px]">
+            {selectedUsers.map(u => (
+              <div key={u._id} className="flex items-center bg-blue-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                <span>{u.name}</span>
+                <button onClick={() => handleRemoveUser(u)} className="ml-1.5 text-blue-200 hover:text-white focus:outline-none"><X size={14}/></button>
+              </div>
+            ))}
+          </div>
+
+          <div className="h-40 overflow-y-auto border rounded-md">
+            {loading ? (
+              <div className="flex justify-center items-center h-full"><LoaderCircle className="w-6 h-6 text-blue-600 animate-spin" /></div>
+            ) : (
+              searchResult?.slice(0, 4).map(u => (
+                <div key={u._id} onClick={() => handleAddUser(u)} className="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer">
+                  <img src={u.pic} alt={u.name} className="w-8 h-8 rounded-full mr-3" />
+                  <div>
+                    <p className="font-semibold">{u.name}</p>
+                    <p className="text-xs text-gray-500">{u.email}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </ReusableModal>
+    </>
+  );
+};
+
+export default GroupChatModal;```
+
+`frontend/src/components/miscellaneous/MessageStatus.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/MessageStatus.jsx
+
+import React from 'react';
+import { Check, CheckCheck } from 'lucide-react';
+
+const MessageStatus = ({ message, currentUser }) => {
+  // We only show status for messages sent by the current user.
+  if (message.sender._id !== currentUser._id) {
+    return null;
+  }
+
+  const myMessageReadColor = '#4FC3F7'; // Bright blue for read
+  const myMessageSentColor = 'rgba(255, 255, 255, 0.6)'; // Light grey for sent
+  
+  // FIX: Logic is now a simple boolean check.
+  if (message.isRead) {
+    return <CheckCheck size={16} color={myMessageReadColor} className="ml-1" />;
+  }
+
+  return <Check size={16} color={myMessageSentColor} className="ml-1" />;
+};
+
+export default MessageStatus;```
+
+`frontend/src/components/miscellaneous/MyChats.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/MyChats.jsx
+
+import React, { useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
+import { ChatState } from '../../Context/ChatProvider';
+import { fetchChats } from '../../services/api';
+import GroupChatModal from './GroupChatModal';
+import { LoaderCircle, Plus } from 'lucide-react';
+
+const getSender = (loggedUser, users) => {
+  if (!loggedUser || !users || users.length < 2) return { name: "Unknown User", pic: "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg" };
+  return users[0]?._id === loggedUser?._id ? users[1] : users[0];
+};
+
+const MyChats = ({ fetchAgain }) => {
+  const { user, selectedChat, setSelectedChat, chats, setChats, notifications, setNotifications, onlineUsers } = ChatState();
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const loadChats = async () => {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const { data } = await fetchChats(user.token);
+        setChats(data);
+      } catch (error) { 
+        toast.error("Failed to load chats.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadChats();
+  }, [user, fetchAgain, setChats]);
+
+  const handleChatClick = (chat) => {
+    setSelectedChat(chat);
+    setNotifications(notifications.filter(n => n.chat._id !== chat._id));
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700">
+    <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+      <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Chats</h2>
+        <GroupChatModal>
+          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800">
+            <Plus size={16} /> New Group
+          </button>
+        </GroupChatModal>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {loading ? (
+          <div className="flex justify-center items-center h-full">
+            <LoaderCircle className="w-8 h-8 text-indigo-600 animate-spin" />
+          </div>
+        ) : chats.length > 0 ? (
+          <div className="flex-1 overflow-y-auto p-2">
+            {chats.map((chat) => {
+              const notificationCount = notifications.filter(n => n.chat._id === chat._id).length;
+              const isSelected = selectedChat?._id === chat._id;
+              const sender = getSender(user, chat.users);
+              const isOnline = !chat.isGroupChat && onlineUsers.includes(sender?._id);
+
+              let latestMessageText = "No messages yet.";
+              const latestNotification = notifications.find(n => n.chat._id === chat._id);
+              if (latestNotification) {
+                latestMessageText = latestNotification.content || "Sent a file";
+              } else if (chat.latestMessage) {
+                const prefix = chat.latestMessage.sender._id === user._id ? "You: " : "";
+                latestMessageText = prefix + (chat.latestMessage.content || "Sent a file");
+              }
+
+              return (
+                <button
+                  key={chat._id}
+                  onClick={() => handleChatClick(chat)}
+                  className={`flex items-center w-full p-3 rounded-lg text-left transition-colors ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                >
+                  <div className="relative flex-shrink-0 mr-4">
+                    <img src={!chat.isGroupChat ? sender.pic : 'https://i.pravatar.cc/150?u=group'} alt="avatar" className="w-12 h-12 rounded-full object-cover" />
+                    {isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-400 border-2 border-white dark:border-slate-800 rounded-full"></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      {!chat.isGroupChat ? sender.name : chat.chatName}
+                    </p>
+                    <p className={`text-sm truncate ${notificationCount > 0 ? 'text-sky-500 dark:text-sky-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {latestMessageText}
+                    </p>
+                  </div>
+                  {notificationCount > 0 && <span className="ml-2 px-2 py-0.5 text-xs font-bold text-white bg-sky-500 rounded-full">{notificationCount}</span>}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center text-slate-500 dark:text-slate-400 mt-10 p-4">
+            <p className="font-medium">No chats found.</p>
+            <p className="text-sm">Click the search icon to start a new conversation.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default MyChats;```
+
+`frontend/src/components/miscellaneous/ProfileModal.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/ProfileModal.jsx
+
+import React, { useState } from 'react';
+import { ChatState } from '../../Context/ChatProvider';
+import { toast } from 'react-toastify';
+// Import the centralized upload function
+import { updateUserProfile, uploadToCloudinary } from '../../services/api';
+import ReusableModal from './ReusableModal';
+
+const ProfileModal = ({ children }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [pic, setPic] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const { user, setUser } = ChatState();
+
+  const handleShow = () => {
+    if(!user) return;
+    setName(user.name);
+    setPic(user.pic);
+    setIsOpen(true);
+  };
+  const handleClose = () => setIsOpen(false);
+
+  const handleImageUpload = async (file) => {
+    setUploading(true);
+    if (file === undefined) {
+      toast.error("Please select an image!");
+      setUploading(false);
+      return;
+    }
+    // We can still check for image type here for a better UX, even if Cloudinary handles it.
+    if (file.type === "image/jpeg" || file.type === "image/png") {
+      try {
+        // Use the centralized and corrected upload function
+        const { url } = await uploadToCloudinary(file);
+        setPic(url);
+        toast.success("Image uploaded successfully!");
+      } catch (error) {
+        toast.error("Error uploading image.");
+      }
+    } else {
+      toast.error("Please select a JPEG or PNG image for your profile.");
+    }
+    setUploading(false);
+  };
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      const { data } = await updateUserProfile({ name, pic }, user.token);
+      localStorage.setItem("userInfo", JSON.stringify(data));
+      setUser(data);
+      toast.success("Profile updated successfully!");
+      handleClose();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not update profile.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <>
+      <div onClick={handleShow}>{children}</div>
+
+      <ReusableModal
+        isOpen={isOpen}
+        onClose={handleClose}
+        title={`${user?.name}'s Profile`}
+        footer={
+          <button onClick={handleSubmit} disabled={loading || uploading} className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400">
+            {loading ? "Saving..." : "Save Changes"}
+          </button>
+        }
+      >
+        <div className="flex flex-col items-center space-y-4">
+          <img src={pic} alt={user?.name} className="w-36 h-36 rounded-full object-cover shadow-md" />
+          <h4 className="text-lg text-gray-500">{user?.email}</h4>
+          
+          <div className="w-full space-y-2">
+            <label className="text-sm font-medium text-gray-700">Update Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="w-full space-y-2">
+            <label className="text-sm font-medium text-gray-700">Update Profile Picture</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleImageUpload(e.target.files[0])}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+            {uploading && <p className="text-xs text-blue-600">Uploading image...</p>}
+          </div>
+        </div>
+      </ReusableModal>
+    </>
+  );
+};
+
+export default ProfileModal;```
+
+`frontend/src/components/miscellaneous/ReusableModal.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/ReusableModal.jsx
+import React, { useEffect } from 'react';
+import ReactDOM from 'react-dom';
+import { X } from 'lucide-react';
+
+const ReusableModal = ({ isOpen, onClose, title, children, footer, theme = 'light' }) => {
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const modalContent = (
+    <div className={theme}>
+      <div className="fixed inset-0 bg-black/60 z-50 flex justify-center items-center p-4 backdrop-blur-sm animate-fade-in-fast">
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md transform transition-all animate-slide-up">
+          <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">{title}</h3>
+            <button onClick={onClose} className="p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">
+              <X size={24} />
+            </button>
+          </div>
+          <div className="p-6">{children}</div>
+          {footer && (
+            <div className="flex justify-end p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 rounded-b-lg">
+              {footer}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  return ReactDOM.createPortal(
+    modalContent,
+    document.getElementById('modal-portal')
+  );
+};
+
+export default ReusableModal;```
+
+`frontend/src/components/miscellaneous/ScrollableChat.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/ScrollableChat.jsx
+
+import React, { useState } from 'react';
+import ScrollableFeed from 'react-scrollable-feed';
+import { ChatState } from '../../Context/ChatProvider';
+import { Download, FileText, MessageSquareReply, LoaderCircle } from 'lucide-react';
+import MessageStatus from './MessageStatus';
+import { toast } from 'react-toastify';
+
+
+// --- New, Robust FileMessage Component ---
+const FileMessage = ({ fileUrl, fileType, isMyMessage }) => {
+  const [loading, setLoading] = useState(false);
+
+  // This function handles the download logic
+  const handleDownload = async (url) => {
+    setLoading(true);
+    try {
+      // 1. Fetch the file data from the original URL
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      // 2. Get the data as a Blob
+      const blob = await response.blob();
+
+      // 3. Create a temporary link element
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      
+      // 4. Extract filename from URL to suggest a name for the downloaded file
+      const filename = url.split('/').pop();
+      link.download = filename || 'download';
+
+      // 5. Programmatically trigger the download
+      document.body.appendChild(link);
+      link.click();
+
+      // 6. Clean up by removing the link and revoking the object URL
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
+    } catch (error) {
+      toast.error('Could not download the file.');
+      console.error('Download error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // We still want to view images and videos directly in the browser
+  if (fileType?.startsWith('image/')) {
+    return (
+      <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="block mt-1">
+        <img src={fileUrl} alt="sent file" className="rounded-lg max-w-xs max-h-64 object-cover" />
+      </a>
+    );
+  }
+
+  if (fileType?.startsWith('video/')) {
+    return (
+      <video controls className="mt-1 rounded-lg max-w-xs max-h-64">
+        <source src={fileUrl} type={fileType} />
+        Your browser does not support the video tag.
+      </video>
+    );
+  }
+
+  // --- UI for all other downloadable files (PDF, DOCX, etc.) ---
+  const baseClasses = "flex items-center p-2 mt-1 rounded-lg transition-colors max-w-xs w-full";
+  const myMessageClasses = isMyMessage
+    ? 'bg-indigo-500'
+    : 'bg-slate-200 dark:bg-slate-600';
+  
+  const textClasses = `font-medium text-sm ${
+    isMyMessage ? 'text-white' : 'text-slate-800 dark:text-slate-200'
+  }`;
+
+  return (
+    // We use a button now, as it performs an action, not navigation.
+    <button
+      onClick={() => handleDownload(fileUrl)}
+      disabled={loading}
+      className={`${baseClasses} ${myMessageClasses} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed`}
+    >
+      <div className="flex-shrink-0 mr-3">
+        {loading ? (
+          <LoaderCircle size={32} className="animate-spin" />
+        ) : fileType === 'application/pdf' ? (
+          <FileText size={32} className="text-red-400" />
+        ) : (
+          <Download size={32} className={isMyMessage ? 'text-white' : 'text-slate-500'} />
+        )}
+      </div>
+      <span className={textClasses}>
+        {loading ? 'Downloading...' : (fileType === 'application/pdf' ? 'Download PDF' : 'Download File')}
+      </span>
+    </button>
+  );
+};
+
+
+// Helper functions to group message bubbles
+const isFirstInBlock = (messages, i) =>
+  i === 0 || messages[i - 1]?.sender._id !== messages[i]?.sender._id;
+const isLastInBlock = (messages, i) =>
+  i === messages.length - 1 || messages[i + 1]?.sender._id !== messages[i]?.sender._id;
+
+const ScrollableChat = ({ messages, setReplyingTo }) => {
+  const { user } = ChatState();
+
+  const formatTime = (dateString) => {
+    const options = { hour: 'numeric', minute: '2-digit', hour12: true };
+    return new Date(dateString).toLocaleTimeString('en-US', options);
+  };
+
+  return (
+    <ScrollableFeed forceScroll={true} className="flex-grow">
+      <div className="px-4 py-2">
+        {messages &&
+          messages.map((m, i) => {
+            const isMyMessage = m.sender._id === user._id;
+            const firstInBlock = isFirstInBlock(messages, i);
+            const lastInBlock = isLastInBlock(messages, i);
+
+            let borderRadiusClasses = "rounded-2xl";
+            if (isMyMessage) {
+              borderRadiusClasses =
+                firstInBlock && lastInBlock
+                  ? 'rounded-2xl'
+                  : firstInBlock
+                  ? 'rounded-t-2xl rounded-bl-2xl'
+                  : lastInBlock
+                  ? 'rounded-b-2xl rounded-tl-2xl'
+                  : 'rounded-l-2xl';
+            } else {
+              borderRadiusClasses =
+                firstInBlock && lastInBlock
+                  ? 'rounded-2xl'
+                  : firstInBlock
+                  ? 'rounded-t-2xl rounded-br-2xl'
+                  : lastInBlock
+                  ? 'rounded-b-2xl rounded-tr-2xl'
+                  : 'rounded-r-2xl';
+            }
+
+            return (
+              <div
+                key={m._id}
+                className={`group flex items-end ${
+                  isMyMessage ? 'justify-end' : 'justify-start'
+                } ${firstInBlock ? 'mt-3' : 'mt-0.5'}`}
+              >
+                <div
+                  className={`relative px-3 py-2 inline-block max-w-md ${borderRadiusClasses} ${
+                    isMyMessage
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  {m.chat.isGroupChat && !isMyMessage && firstInBlock && (
+                    <p className="text-xs font-bold text-purple-500 dark:text-purple-400 mb-1">
+                      {m.sender.name}
+                    </p>
+                  )}
+
+                  {m.parentMessage && (
+                    <a
+                      href={`#${m.parentMessage._id}`}
+                      className="block mb-2 p-2 bg-black/10 dark:bg-black/20 rounded-lg text-xs cursor-pointer hover:bg-black/20 dark:hover:bg-black/30"
+                    >
+                      <p className="font-bold">{m.parentMessage.sender.name}</p>
+                      <p className="truncate opacity-80">
+                        {m.parentMessage.content || 'a file'}
+                      </p>
+                    </a>
+                  )}
+
+                  <div className="flex items-end gap-2">
+                    <div className="text-sm" style={{ wordBreak: 'break-word' }}>
+                      {m.fileUrl ? (
+                        <FileMessage
+                          fileUrl={m.fileUrl}
+                          fileType={m.fileType}
+                          isMyMessage={isMyMessage}
+                        />
+                      ) : (
+                        m.content
+                      )}
+                    </div>
+
+                    <div className="flex-shrink-0 self-end -mb-1">
+                      <span
+                        className={`text-xs ${
+                          isMyMessage
+                            ? 'text-indigo-200'
+                            : 'text-slate-400 dark:text-slate-500'
+                        }`}
+                      >
+                        {formatTime(m.createdAt)}
+                      </span>
+                      {isMyMessage && (
+                        <MessageStatus message={m} chat={m.chat} currentUser={user} />
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setReplyingTo(m)}
+                    className={`absolute top-1/2 -translate-y-1/2 p-1.5 bg-white dark:bg-slate-600 rounded-full shadow-md transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 ${
+                      isMyMessage ? '-left-4' : '-right-4'
+                    }`}
+                    aria-label="Reply to message"
+                  >
+                    <MessageSquareReply size={16} className="text-slate-600 dark:text-slate-300" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    </ScrollableFeed>
+  );
+};
+
+export default ScrollableChat;```
+
+`frontend/src/components/miscellaneous/SideDrawer.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/SideDrawer.jsx
+
+import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
+import { toast } from 'react-toastify';
+import { ChatState } from '../../Context/ChatProvider';
+import { searchUsers, accessChat } from '../../services/api';
+import { Search, X, LoaderCircle } from 'lucide-react';
+
+const DrawerContent = ({
+  isOpen,
+  handleClose,
+  search,
+  setSearch,
+  loading,
+  searchResult,
+  loadingChat,
+  handleAccessChat,
+}) => (
+  <>
+    {/* Overlay */}
+    <div
+      onClick={handleClose}
+      className="fixed inset-0 bg-black/60 z-40 animate-fade-in-fast"
+    ></div>
+
+    {/* Drawer Panel */}
+    <div
+      className={`fixed top-0 left-0 h-full bg-white dark:bg-slate-800 shadow-xl z-50 w-full max-w-sm p-4 transform transition-transform duration-300 ${
+        isOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
+      {/* Header */}
+      <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+          Search Users
+        </h3>
+        <button
+          onClick={handleClose}
+          className="p-1 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative">
+        <Search
+          size={18}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+        />
+        <input
+          type="text"
+          placeholder="Search by name or email"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          autoFocus
+        />
+      </div>
+
+      {/* Search Results */}
+      <div className="mt-4 flex-1 overflow-y-auto">
+        {loading ? (
+          <div className="flex justify-center items-center p-10">
+            <LoaderCircle className="w-8 h-8 text-indigo-600 animate-spin" />
+          </div>
+        ) : (
+          searchResult?.map((u) => (
+            <div
+              key={u._id}
+              onClick={() => handleAccessChat(u._id)}
+              className="flex items-center p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-colors"
+            >
+              <img
+                src={u.pic}
+                alt={u.name}
+                className="w-10 h-10 rounded-full mr-3 object-cover"
+              />
+              <div>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">
+                  {u.name}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {u.email}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+        {loadingChat && (
+          <div className="flex justify-center items-center p-4">
+            <LoaderCircle className="w-6 h-6 text-indigo-600 animate-spin" />
+          </div>
+        )}
+      </div>
+    </div>
+  </>
+);
+
+const SideDrawer = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [searchResult, setSearchResult] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingChat, setLoadingChat] = useState(false);
+
+  const { user, setSelectedChat, chats, setChats } = ChatState();
+
+  useEffect(() => {
+    if (!search.trim()) {
+      setSearchResult([]);
+      return;
+    }
+
+    const delayDebounce = setTimeout(() => {
+      handleSearch();
+    }, 500);
+
+    return () => clearTimeout(delayDebounce);
+  }, [search]);
+
+  const handleSearch = async () => {
+    if (!search.trim()) {
+      // toast.warn('Please enter something to search'); // Optional: can be annoying
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data } = await searchUsers(search, user.token);
+      setSearchResult(data);
+    } catch (error) {
+      toast.error('Failed to load search results');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAccessChat = async (userId) => {
+    setLoadingChat(true);
+    try {
+      const { data } = await accessChat(userId, user.token);
+      
+      const newChat = Array.isArray(data) ? data[0] : data;
+
+      if (!chats.find((c) => c._id === newChat._id)) {
+        setChats([newChat, ...chats]);
+      }
+      setSelectedChat(newChat);
+      handleClose();
+    } catch (error) {
+      toast.error('Error fetching the chat');
+    } finally {
+      setLoadingChat(false);
+    }
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setSearch('');
+    setSearchResult([]);
+  };
+
+  return (
+    <>
+      {/* Trigger Button */}
+      <button
+        onClick={() => setIsOpen(true)}
+        className="p-2 rounded-full text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 focus:outline-none"
+      >
+        <Search size={20} />
+      </button>
+
+      {/* Drawer Portal */}
+      {isOpen &&
+        ReactDOM.createPortal(
+          <DrawerContent
+            isOpen={isOpen}
+            handleClose={handleClose}
+            search={search}
+            setSearch={setSearch}
+            loading={loading}
+            searchResult={searchResult}
+            loadingChat={loadingChat}
+            handleAccessChat={handleAccessChat}
+          />,
+          document.getElementById('modal-portal')
+        )}
+    </>
+  );
+};
+
+export default SideDrawer;```
+
+`frontend/src/components/miscellaneous/ThemeToggle.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/ThemeToggle.jsx
+import React from 'react';
+import { ChatState } from '../../Context/ChatProvider';
+import { Sun, Moon } from 'lucide-react';
+
+const ThemeToggle = () => {
+  const { theme, setTheme } = ChatState();
+
+  const toggleTheme = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light');
+  };
+
+  return (
+    <button
+      onClick={toggleTheme}
+      className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      aria-label="Toggle theme"
+    >
+      {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+    </button>
+  );
+};
+
+export default ThemeToggle;```
+
+`frontend/src/components/miscellaneous/UpdateGroupChatModal.jsx`
+
+```javascript
+// frontend/src/components/miscellaneous/UpdateGroupChatModal.jsx
+
+import React, { useState } from 'react';
+import { ChatState } from '../../Context/ChatProvider';
+import { toast } from 'react-toastify';
+import {
+  searchUsers,
+  updateGroupDetails, // Renamed function from AI code
+  addUserToGroup,
+  removeUserFromGroup,
+  uploadToCloudinary,
+} from '../../services/api';
+import ReusableModal from './ReusableModal';
+import { X, LoaderCircle } from 'lucide-react';
+
+const UpdateGroupChatModal = ({ fetchAgain, setFetchAgain, children }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [groupChatName, setGroupChatName] = useState('');
+  const [groupIconFile, setGroupIconFile] = useState(null);
+  const [searchResult, setSearchResult] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [updateLoading, setUpdateLoading] = useState(false);
+
+  const { user, selectedChat, setSelectedChat } = ChatState();
+  const isAdmin = user?._id === selectedChat?.groupAdmin?._id;
+
+  const handleUpdate = async () => {
+    setUpdateLoading(true);
+
+    let groupIconUrl;
+    if (groupIconFile) {
+      try {
+        groupIconUrl = await uploadToCloudinary(groupIconFile);
+      } catch (error) {
+        toast.error("Icon upload failed.");
+        setUpdateLoading(false);
+        return;
+      }
+    }
+
+    const updateData = { chatId: selectedChat._id };
+    if (groupChatName && groupChatName !== selectedChat.chatName) {
+      updateData.chatName = groupChatName;
+    }
+    if (groupIconUrl) {
+      updateData.groupIcon = groupIconUrl;
+    }
+
+    if (Object.keys(updateData).length <= 1) {
+      setUpdateLoading(false);
+      return;
+    }
+
+    try {
+      const { data } = await updateGroupDetails(updateData, user.token);
+      setSelectedChat(data);
+      setFetchAgain(!fetchAgain);
+      toast.success("Group updated successfully!");
+      handleClose();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not update group.");
+    }
+
+    setUpdateLoading(false);
+  };
+
+  const handleSearch = async (query) => {
+    if (!query) return;
+    setLoading(true);
+    try {
+      const { data } = await searchUsers(query, user.token);
+      setSearchResult(data);
+    } catch (error) {
+      toast.error('Failed to load search results');
+    }
+    setLoading(false);
+  };
+
+  const handleAddUser = async (userToAdd) => {
+    if (selectedChat.users.find((u) => u._id === userToAdd._id)) {
+      toast.error("User is already in the group");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data } = await addUserToGroup(selectedChat._id, userToAdd._id, user.token);
+      setSelectedChat(data);
+      setFetchAgain(!fetchAgain);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not add user");
+    }
+    setLoading(false);
+  };
+
+  const handleRemoveUser = async (userToRemove) => {
+    if (selectedChat.groupAdmin._id !== user._id && userToRemove._id !== user._id) {
+      toast.error("Only admins can remove someone!");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data } = await removeUserFromGroup(selectedChat._id, userToRemove._id, user.token);
+      userToRemove._id === user._id ? setSelectedChat(null) : setSelectedChat(data);
+      setFetchAgain(!fetchAgain);
+      if (userToRemove._id === user._id) setIsOpen(false);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Could not remove user");
+    }
+    setLoading(false);
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setSearchResult([]);
+    setGroupChatName('');
+    setGroupIconFile(null);
+  };
+
+  return (
+    <>
+      <div onClick={() => setIsOpen(true)}>{children}</div>
+      <ReusableModal
+        isOpen={isOpen}
+        onClose={handleClose}
+        title={selectedChat?.chatName}
+        footer={
+          <button
+            onClick={() => handleRemoveUser(user)}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Leave Group
+          </button>
+        }
+      >
+        <div className="space-y-4">
+
+          {/* Group Icon Upload */}
+          <div className="flex justify-center">
+            <label htmlFor="group-icon-upload" className="cursor-pointer">
+              <img
+                src={selectedChat?.groupIcon || 'https://i.pravatar.cc/150?u=group'}
+                alt="group icon"
+                className="w-24 h-24 rounded-full object-cover"
+              />
+            </label>
+            <input
+              id="group-icon-upload"
+              type="file"
+              className="hidden"
+              onChange={(e) => setGroupIconFile(e.target.files[0])}
+              disabled={!isAdmin}
+            />
+          </div>
+
+          {/* Member List */}
+          <div>
+            <h6 className="font-semibold mb-2">Members</h6>
+            <div className="flex flex-wrap gap-2">
+              {selectedChat?.users.map((u) => (
+                <div
+                  key={u._id}
+                  className="flex items-center bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded-full"
+                >
+                  <span>{u.name}</span>
+                  {isAdmin && u._id !== user._id && (
+                    <button onClick={() => handleRemoveUser(u)} className="ml-1.5 text-green-200 hover:text-white">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Rename/Update Group */}
+          <div className="flex gap-2">
+            <input
+              placeholder="Chat Name"
+              defaultValue={selectedChat?.chatName}
+              onChange={(e) => setGroupChatName(e.target.value)}
+              disabled={!isAdmin}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+            />
+            <button
+              onClick={handleUpdate}
+              disabled={!isAdmin || updateLoading}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400"
+            >
+              {updateLoading ? <LoaderCircle className="animate-spin" size={18} /> : 'Update'}
+            </button>
+          </div>
+
+          {/* Add Users */}
+          {isAdmin && (
+            <div>
+              <input
+                placeholder="Add user to group"
+                onChange={(e) => handleSearch(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          {/* Search Result List */}
+          <div className="h-24 overflow-y-auto border rounded-md">
+            {loading ? (
+              <div className="flex justify-center items-center h-full">
+                <LoaderCircle className="w-6 h-6 text-blue-600 animate-spin" />
+              </div>
+            ) : (
+              searchResult?.slice(0, 3).map((u) => (
+                <div
+                  key={u._id}
+                  onClick={() => handleAddUser(u)}
+                  className="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer"
+                >
+                  <img src={u.pic} alt={u.name} className="w-8 h-8 rounded-full mr-3" />
+                  <div>
+                    <p className="font-semibold">{u.name}</p>
+                    <p className="text-xs text-gray-500">{u.email}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </ReusableModal>
+    </>
+  );
+};
+
+export default UpdateGroupChatModal;
+```
+
+`frontend/src/Context/ChatProvider.js`
+
+```javascript
+// frontend/src/Context/ChatProvider.js
+import { createContext, useContext, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+const ChatContext = createContext();
+
+const ChatProvider = ({ children }) => {
+  const [user, setUser] = useState();
+  const [selectedChat, setSelectedChat] = useState(); // The chat currently open in ChatBox
+  const [chats, setChats] = useState([]); // The user's list of all chats
+  const [onlineUsers, setOnlineUsers] = useState([]); // The list of online users
+  const [typingStatus, setTypingStatus] = useState({});
+  const [notifications, setNotifications] = useState([]); // Notifications for new messages
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const userInfo = JSON.parse(localStorage.getItem("userInfo"));
+    setUser(userInfo);
+
+    if (!userInfo) {
+      navigate("/");
+    }
+  }, [navigate]);
+
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove(theme === "light" ? "dark" : "light");
+    root.classList.add(theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  return (
+    <ChatContext.Provider
+      value={{
+        user,
+        setUser,
+        selectedChat,
+        setSelectedChat,
+        chats,
+        setChats,
+        onlineUsers,
+        setOnlineUsers,
+        typingStatus,
+        setTypingStatus,
+        notifications,
+        setNotifications,
+        theme,
+        setTheme,
+      }}
+    >
+      {children}
+    </ChatContext.Provider>
+  );
+};
+
+export const ChatState = () => useContext(ChatContext);
+
+export default ChatProvider;
+```
+
+`frontend/src/index.css`
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;```
+
+`frontend/src/index.js`
+
+```javascript
+// frontend/src/index.js
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./index.css"; // This now contains Tailwind styles
+import App from "./App";
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+`frontend/src/pages/ChatsPage.jsx`
+
+```javascript
+// frontend/src/pages/ChatsPage.jsx
+
+import React, { useState, useEffect } from "react";
+import { ChatState } from "../Context/ChatProvider";
+import MyChats from "../components/miscellaneous/MyChats";
+import ChatBox from "../components/miscellaneous/ChatBox";
+import Header from "../components/Chats/Header";
+import io from 'socket.io-client';
+
+const ENDPOINT = process.env.NODE_ENV === 'production' ? '/' : 'http://localhost:5000';
+let socket;
+
+const ChatsPage = () => {
+  const { user, selectedChat, setOnlineUsers, setTypingStatus, notifications, setNotifications } = ChatState();
+  const [fetchAgain, setFetchAgain] = useState(false);
+
+  // This useEffect now has a STABLE dependency array.
+  useEffect(() => {
+    if (!user) return;
+    
+    socket = io(ENDPOINT);
+    socket.emit("setup", user);
+    
+    socket.on("connected", () => console.log("Socket connected on ChatsPage"));
+    socket.on("online users", (users) => setOnlineUsers(users));
+    
+    // These listeners are set up once and will update state correctly.
+    socket.on('typing', (chatId) => setTypingStatus(prev => ({ ...prev, [chatId]: true })));
+    socket.on('stop typing', (chatId) => setTypingStatus(prev => ({ ...prev, [chatId]: false })));
+    
+    return () => {
+        socket.disconnect();
+    };
+    // FIX: The dependency array now only contains stable functions from the context provider.
+    // It will not run again when `selectedChat` or `notifications` change.
+  }, [user, setOnlineUsers, setTypingStatus]);
+  
+  // This separate useEffect handles ONLY the message listener.
+  useEffect(() => {
+      if(!socket) return;
+      
+      const messageListener = (newMessageReceived) => {
+          if (!selectedChat || selectedChat._id !== newMessageReceived.chat._id) {
+            if (!notifications.some(n => n._id === newMessageReceived._id)) {
+                setNotifications([newMessageReceived, ...notifications]);
+            }
+          }
+          setFetchAgain(prev => !prev);
+      };
+      
+      socket.on("message recieved", messageListener);
+      
+      return () => {
+          socket.off("message recieved", messageListener);
+      };
+  }, [socket, selectedChat, notifications, setNotifications])
+
+  return (
+    <div className="w-full min-h-screen bg-slate-100 dark:bg-slate-900">
+      {user && <Header />}
+      <main className="pt-16 h-screen">
+        <div className="flex h-full p-2 sm:p-4 gap-2 sm:gap-4">
+          <div className={`${selectedChat ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-1/3 lg:w-1/4`}>
+            {user && <MyChats fetchAgain={fetchAgain} />}
+          </div>
+          <div className={`${selectedChat ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-2/3 lg:w-3/4`}>
+            {user && <ChatBox fetchAgain={fetchAgain} setFetchAgain={setFetchAgain} socket={socket} />}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default ChatsPage;```
+
+`frontend/src/pages/LandingPage.jsx`
+
+```javascript
+// frontend/src/pages/LandingPage.jsx
+
+import React, { useEffect, useState } from 'react';
+import { motion, useScroll, useTransform } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { 
+  MessageSquare, Users, FileCheck2, Eye, ShieldCheck, ArrowRight, Sun, Moon 
+} from 'lucide-react';
+import Auth from '../components/Authentication/Auth';
+import ReusableModal from '../components/miscellaneous/ReusableModal';
+
+const LandingPage = () => {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [initialTab, setInitialTab] = useState('login');
+  
+  const [landingTheme, setLandingTheme] = useState(
+    window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  );
+  
+  const navigate = useNavigate();
+  const { scrollY } = useScroll();
+  const heroY = useTransform(scrollY, [0, 300], [0, -50]);
+
+  useEffect(() => {
+    const userInfo = localStorage.getItem('userInfo');
+    if (userInfo) {
+      navigate('/chats');
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 50);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const openAuthModal = (tab) => {
+    setInitialTab(tab);
+    setIsAuthModalOpen(true);
+  };
+  
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('dark', 'light');
+    root.classList.add(landingTheme);
+  }, [landingTheme]);
+
+  const fadeInUp = {
+    initial: { opacity: 0, y: 40 },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeInOut" } }
+  };
+
+  const staggerContainer = {
+    animate: {
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const features = [
+    { icon: Users, title: "Group & Private Chats", description: "Connect with individuals or create group conversations for seamless collaboration." },
+    { icon: FileCheck2, title: "Rich Media Sharing", description: "Share images, videos, and documents securely with instant delivery." },
+    { icon: Eye, title: "Real-Time Presence", description: "See when messages are read and who's online for better communication flow." }
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+      {/* Navigation */}
+      <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+        isScrolled ? 'bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg shadow-md border-b border-slate-200 dark:border-slate-800' : 'bg-transparent'
+      }`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-2 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              <MessageSquare className="h-8 w-8 text-indigo-600" />
+              <span className="text-2xl font-bold text-slate-900 dark:text-white">NexChat</span>
+            </div>
+            
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <button
+                onClick={() => setLandingTheme(landingTheme === 'light' ? 'dark' : 'light')}
+                className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                aria-label="Toggle theme"
+              >
+                {landingTheme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+              </button>
+              <button onClick={() => openAuthModal('login')} className="hidden sm:block text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-semibold px-4 py-2">Login</button>
+              <button onClick={() => openAuthModal('signup')} className="bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 transition-transform duration-200 hover:scale-105 shadow-sm font-semibold">
+                Sign Up
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-24 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 via-sky-400/5 to-indigo-600/5 dark:from-indigo-900/10 dark:via-sky-900/10 dark:to-indigo-800/10"></div>
+        <motion.div initial="initial" animate="animate" variants={staggerContainer} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center">
+            <motion.h1 variants={fadeInUp} className="text-5xl md:text-7xl font-bold text-slate-900 dark:text-white mb-6 tracking-tighter">
+              Your Conversation,
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-sky-500">
+                Instantly Connected.
+              </span>
+            </motion.h1>
+            <motion.p variants={fadeInUp} className="text-lg text-slate-600 dark:text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed">
+              NexChat offers a seamless, secure, and feature-rich platform for both one-on-one chats and group collaboration.
+            </motion.p>
+            <motion.div variants={fadeInUp}>
+              <button onClick={() => openAuthModal('signup')} className="bg-indigo-600 text-white px-8 py-4 rounded-xl shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105 flex items-center space-x-2 text-lg font-semibold mx-auto">
+                <span>Get Started for Free</span>
+                <ArrowRight className="h-5 w-5" />
+              </button>
+            </motion.div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="py-24 bg-white dark:bg-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">Everything You Need to Connect</h2>
+            <p className="text-xl text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">Powerful features designed for productive conversations.</p>
+          </motion.div>
+          <motion.div initial="initial" whileInView="animate" viewport={{ once: true }} variants={staggerContainer} className="grid md:grid-cols-3 gap-8">
+            {features.map((feature, index) => (
+              <motion.div key={index} variants={fadeInUp} className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-8 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-slate-200 dark:border-slate-700">
+                <div className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
+                  <feature.icon className="h-8 w-8" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-3">{feature.title}</h3>
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{feature.description}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+      
+      {/* Security Section */}
+      <section id="security" className="py-24 bg-slate-50 dark:bg-dark-bg">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="text-center">
+            <div className="inline-block p-4 bg-indigo-100 dark:bg-indigo-900/50 rounded-3xl mb-6">
+              <ShieldCheck className="h-10 w-10 text-brand-primary" />
+            </div>
+            <h2 className="text-4xl font-bold text-light-text-primary dark:text-dark-text-primary mb-4">Your Privacy, Our Priority</h2>
+            <p className="text-xl text-light-text-secondary dark:text-dark-text-secondary max-w-3xl mx-auto">Built with security at its core, NexChat uses modern authentication and secure connections to keep your conversations private.</p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 bg-gradient-to-r from-indigo-600 to-sky-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
+            <h2 className="text-4xl font-bold text-white mb-6">Ready to Join the Conversation?</h2>
+            <p className="text-xl text-indigo-100 mb-8 max-w-2xl mx-auto">Start connecting with your team and friends today. It's free to get started.</p>
+            <button onClick={() => openAuthModal('signup')} className="inline-flex items-center space-x-2 bg-white text-indigo-600 px-8 py-4 rounded-xl shadow-lg hover:bg-slate-50 transition-all transform hover:scale-105 text-lg font-semibold">
+              <span>Sign Up Now</span>
+              <ArrowRight className="h-5 w-5" />
+            </button>
+          </motion.div>
+        </div>
+      </section>
+      
+      {/* Footer */}
+      <footer className="bg-slate-800 dark:bg-slate-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-slate-400">
+          <p>© {new Date().getFullYear()} NexChat. All rights reserved.</p>
+        </div>
+      </footer>
+
+      {/* Authentication Modal */}
+      <ReusableModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        title="Welcome to NexChat"
+        theme={landingTheme}
+      >
+        <Auth 
+          initialTab={initialTab} 
+          authTheme={landingTheme}
+        />
+      </ReusableModal>
+    </div>
+  );
+};
+
+export default LandingPage;```
+
+`frontend/src/services/api.js`
+
+```javascript
+// frontend/src/services/api.js
+
+import axios from "axios";
+
+const api = axios.create({
+  baseURL: "/api", // Base URL for all API requests
+});
+
+// Interceptor to handle expired tokens and other auth errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const isAuthRoute =
+      error.config.url === "/user/login" || error.config.url === "/user/signup";
+
+    if (error.response && error.response.status === 401 && !isAuthRoute) {
+      localStorage.removeItem("userInfo");
+      window.location.href = "/";
+    }
+    return Promise.reject(error);
+  }
+);
+
+export const uploadToCloudinary = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", "Chat-App");
+
+  const cloudinaryAPI = "https://api.cloudinary.com/v1_1/dr8gzltrw/auto/upload";
+
+  const response = await fetch(cloudinaryAPI, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error("File upload failed");
+  }
+
+  const result = await response.json();
+
+  // This is the crucial correction logic
+  let correctedUrl = result.secure_url;
+  if (result.resource_type !== "image") {
+    correctedUrl = correctedUrl.replace(
+      "/image/upload/",
+      `/${result.resource_type}/upload/`
+    );
+  }
+
+  // Return an object with all the necessary, correct information
+  return {
+    url: correctedUrl,
+    resourceType: result.resource_type,
+    fileType: file.type, // Also return the browser-detected file type
+  };
+};
+
+// --- User Routes ---
+
+export const loginUser = (email, password) => {
+  return api.post("/user/login", { email, password });
+};
+export const registerUser = (userData) => {
+  return api.post("/user/signup", userData);
+};
+export const searchUsers = (searchQuery, token) => {
+  return api.get(`/user?search=${searchQuery}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+export const updateUserProfile = (userData, token) => {
+  return api.put("/user/profile", userData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+// --- End - User Routes ---
+
+// --- Chat Routes ---
+
+export const fetchChats = (token) => {
+  return api.get("/chat", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+export const accessChat = (userId, token) => {
+  return api.post(
+    `/chat`,
+    { userId },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+};
+
+// --- End - Chat Routes ---
+
+// --- Group Chat Routes ---
+
+export const createGroupChat = (groupData, token) => {
+  return api.post(`/chat/group`, groupData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
+export const updateGroupDetails = (updateData, token) => {
+  return api.put("/chat/group/update", updateData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
+export const addUserToGroup = (chatId, userId, token) => {
+  return api.put(
+    "/chat/add-to-group",
+    { chatId, userId },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+};
+
+export const removeUserFromGroup = (chatId, userId, token) => {
+  return api.put(
+    "/chat/remove-from-group",
+    { chatId, userId },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+};
+
+// --- End - Group Chat Routes ---
+
+// --- Message Routes ---
+
+export const fetchMessages = (chatId, token) => {
+  return api.get(`/message/${chatId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+export const sendMessage = (messageData, token) => {
+  return api.post(`/message`, messageData, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
+// --- End - Message Routes ---
+
+export default api;
+```
+
+`frontend/tailwind.config.js`
+
+```javascript
+module.exports = {
+  darkMode: "class",
+  content: ["./src/**/*.{js,jsx,ts,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        // Light Theme Colors
+        "light-bg": "#F8FAFC", // slate-50
+        "light-surface": "#FFFFFF", // white
+        "light-text-primary": "#1E293B", // slate-800
+        "light-text-secondary": "#64748B", // slate-500
+
+        // Dark Theme Colors
+        "dark-bg": "#0F172A", // slate-900
+        "dark-surface": "#1E293B", // slate-800
+        "dark-text-primary": "#E2E8F0", // slate-200
+        "dark-text-secondary": "#94A3B8", // slate-400
+
+        // Brand & Accent Colors
+        "brand-primary": "#4F46E5", // indigo-600
+        "brand-secondary": "#38BDF8", // sky-400
+      },
+    },
+  },
+  plugins: [],
+};
+```
+
