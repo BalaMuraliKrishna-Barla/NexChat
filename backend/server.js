@@ -18,6 +18,10 @@ connectDB();
 const app = express();
 app.use(express.json());
 
+// Trust the first proxy in front of the app (Render's load balancer)
+app.set("trust proxy", 1);
+
+
 // --- Security & API Setup ---
 app.use(helmet());
 const limiter = rateLimit({

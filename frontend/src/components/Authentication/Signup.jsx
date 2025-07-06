@@ -65,7 +65,8 @@ export default function Signup() {
     if (picFile) {
       try {
         toast.info("Uploading profile picture...");
-        profilePicUrl = await uploadToCloudinary(picFile);
+        const { url } = await uploadToCloudinary(picFile);
+        profilePicUrl = url;
       } catch (error) {
         toast.error("Image upload failed. Please try again.");
         setLoading(false);

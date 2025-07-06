@@ -30,7 +30,8 @@ const UpdateGroupChatModal = ({ fetchAgain, setFetchAgain, children }) => {
     let groupIconUrl;
     if (groupIconFile) {
       try {
-        groupIconUrl = await uploadToCloudinary(groupIconFile);
+        const { url } = await uploadToCloudinary(groupIconFile);
+        groupIconUrl = url;
       } catch (error) {
         toast.error("Icon upload failed.");
         setUpdateLoading(false);
