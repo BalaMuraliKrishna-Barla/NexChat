@@ -6,7 +6,7 @@ const {
   updateUserProfile,
 } = require("../controllers/userControllers.js");
 // const chats = require("./backend/chats");
-const { protect } = require('../middleware/authMiddleWare.js');
+const { protect } = require("../middleware/authMiddleware.js");
 const router = express.Router()
 
 router.post('/signup', registerUser);
