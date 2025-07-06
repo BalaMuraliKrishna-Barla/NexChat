@@ -1,9 +1,10 @@
 // frontend/src/components/Authentication/Login.jsx
-
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import { loginUser } from '../../services/api'; 
+import { LoaderCircle } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -32,39 +33,34 @@ const Login = () => {
   };
 
   return (
-    <form onSubmit={handleFormSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="email" className="sr-only">Email</label>
-        <input
-          id="email"
-          type="email"
-          placeholder="Enter Your Email Address"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-      <div>
-        <label htmlFor="password-login" className="sr-only">Password</label>
-        <input
-          id="password-login"
-          type="password"
-          placeholder="Password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+    <form onSubmit={handleFormSubmit} className="space-y-6">
+      <input
+        id="email-login"
+        type="email"
+        placeholder="Email Address"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-2 border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+      />
+      <input
+        id="password-login"
+        type="password"
+        placeholder="Password"
+        required
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-2 border-transparent rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white"
+      />
       <button
         type="submit"
         disabled={loading}
-        className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
+        className="w-full flex justify-center items-center gap-2 py-2.5 px-4 bg-brand-primary text-white font-semibold rounded-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary dark:focus:ring-offset-slate-800 disabled:opacity-50"
       >
+        {loading && <LoaderCircle size={18} className="animate-spin" />}
         {loading ? "Logging in..." : "Login"}
       </button>
-      <ToastContainer position="bottom-center" autoClose={3000} hideProgressBar={false} />
+      <ToastContainer position="bottom-center" autoClose={3000} hideProgressBar={false} theme="colored" />
     </form>
   );
 };

@@ -11,6 +11,7 @@ const ChatProvider = ({ children }) => {
   const [onlineUsers, setOnlineUsers] = useState([]); // The list of online users
   const [typingStatus, setTypingStatus] = useState({});
   const [notifications, setNotifications] = useState([]); // Notifications for new messages
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
 
   const navigate = useNavigate();
 
@@ -22,6 +23,14 @@ const ChatProvider = ({ children }) => {
       navigate("/");
     }
   }, [navigate]);
+
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove(theme === "light" ? "dark" : "light");
+    root.classList.add(theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   return (
     <ChatContext.Provider
@@ -38,6 +47,8 @@ const ChatProvider = ({ children }) => {
         setTypingStatus,
         notifications,
         setNotifications,
+        theme,
+        setTheme,
       }}
     >
       {children}

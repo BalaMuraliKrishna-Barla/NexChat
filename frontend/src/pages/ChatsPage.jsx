@@ -56,9 +56,9 @@ const ChatsPage = () => {
   }, [socket, selectedChat, notifications, setNotifications])
 
   return (
-    <div className="w-full min-h-screen bg-gray-100">
+    <div className="w-full min-h-screen bg-slate-100 dark:bg-slate-900">
       {user && <Header />}
-      <main className="pt-[60px] h-screen">
+      <main className="pt-16 h-screen">
         <div className="flex h-full p-2 sm:p-4 gap-2 sm:gap-4">
           <div className={`${selectedChat ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-1/3 lg:w-1/4`}>
             {user && <MyChats fetchAgain={fetchAgain} />}

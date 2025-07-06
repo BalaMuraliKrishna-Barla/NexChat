@@ -30,8 +30,7 @@ const MyChats = ({ fetchAgain }) => {
       }
     };
     loadChats();
-    // FIX: Added `onlineUsers` to dependency array to force re-render when it changes.
-  }, [user, fetchAgain, setChats, onlineUsers]);
+  }, [user, fetchAgain, setChats]);
 
   const handleChatClick = (chat) => {
     setSelectedChat(chat);
@@ -39,11 +38,11 @@ const MyChats = ({ fetchAgain }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-xl shadow-lg border border-gray-200">
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <h2 className="text-xl font-bold text-gray-800">My Chats</h2>
+    <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700">
+    <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+      <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Chats</h2>
         <GroupChatModal>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800">
             <Plus size={16} /> New Group
           </button>
         </GroupChatModal>
@@ -51,20 +50,19 @@ const MyChats = ({ fetchAgain }) => {
 
       <div className="flex-1 overflow-y-auto p-2">
         {loading ? (
-          <div className="flex justify-center items-center h-full"><LoaderCircle className="w-8 h-8 text-blue-600 animate-spin" /></div>
+          <div className="flex justify-center items-center h-full">
+            <LoaderCircle className="w-8 h-8 text-indigo-600 animate-spin" />
+          </div>
         ) : chats.length > 0 ? (
-          <div className="flex flex-col space-y-1">
+          <div className="flex-1 overflow-y-auto p-2">
             {chats.map((chat) => {
+              const notificationCount = notifications.filter(n => n.chat._id === chat._id).length;
               const isSelected = selectedChat?._id === chat._id;
               const sender = getSender(user, chat.users);
               const isOnline = !chat.isGroupChat && onlineUsers.includes(sender?._id);
-              
-              // Find the most recent notification for this chat, if any.
-              const latestNotification = notifications.find(n => n.chat._id === chat._id);
-              const notificationCount = notifications.filter(n => n.chat._id === chat._id).length;
 
-              // Determine what text to show as the preview.
               let latestMessageText = "No messages yet.";
+              const latestNotification = notifications.find(n => n.chat._id === chat._id);
               if (latestNotification) {
                 latestMessageText = latestNotification.content || "Sent a file";
               } else if (chat.latestMessage) {
@@ -76,25 +74,27 @@ const MyChats = ({ fetchAgain }) => {
                 <button
                   key={chat._id}
                   onClick={() => handleChatClick(chat)}
-                  className={`flex items-center w-full p-3 rounded-lg text-left transition-colors ${isSelected ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+                  className={`flex items-center w-full p-3 rounded-lg text-left transition-colors ${isSelected ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                 >
-                  <div className="relative flex-shrink-0">
-                    <img src={!chat.isGroupChat ? sender.pic : 'https://i.pravatar.cc/150?u=group'} alt="avatar" className="w-12 h-12 rounded-full object-cover mr-4" />
-                    {isOnline && <div className="absolute bottom-0 right-4 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>}
+                  <div className="relative flex-shrink-0 mr-4">
+                    <img src={!chat.isGroupChat ? sender.pic : 'https://i.pravatar.cc/150?u=group'} alt="avatar" className="w-12 h-12 rounded-full object-cover" />
+                    {isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-400 border-2 border-white dark:border-slate-800 rounded-full"></div>}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 truncate">{!chat.isGroupChat ? sender.name : chat.chatName}</p>
-                    <p className={`text-sm truncate ${notificationCount > 0 ? 'text-blue-600 font-bold' : 'text-gray-500'}`}>
+                    <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      {!chat.isGroupChat ? sender.name : chat.chatName}
+                    </p>
+                    <p className={`text-sm truncate ${notificationCount > 0 ? 'text-sky-500 dark:text-sky-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
                       {latestMessageText}
                     </p>
                   </div>
-                  {notificationCount > 0 && <span className="ml-2 px-2 py-0.5 text-xs font-bold text-white bg-blue-600 rounded-full">{notificationCount}</span>}
+                  {notificationCount > 0 && <span className="ml-2 px-2 py-0.5 text-xs font-bold text-white bg-sky-500 rounded-full">{notificationCount}</span>}
                 </button>
               );
             })}
           </div>
         ) : (
-          <div className="text-center text-gray-500 mt-10 p-4">
+          <div className="text-center text-slate-500 dark:text-slate-400 mt-10 p-4">
             <p className="font-medium">No chats found.</p>
             <p className="text-sm">Click the search icon to start a new conversation.</p>
           </div>

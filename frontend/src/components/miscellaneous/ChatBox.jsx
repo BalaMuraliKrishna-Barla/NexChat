@@ -37,7 +37,7 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
   const textInputRef = useRef(null);
   
   // --- GLOBAL STATE ---
-  const { user, selectedChat, setSelectedChat, typingStatus } = ChatState();
+  const { user, selectedChat, setSelectedChat, typingStatus, theme } = ChatState();
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -191,7 +191,6 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
             const result = await res.json();
             payload.fileUrl = result.secure_url;
             payload.fileType = fileToPreview.type || result.resource_type;
-            // REMOVED: No focus call here.
         } catch (error) {
             toast.error("File upload failed.");
             setUploading(false);
@@ -218,7 +217,6 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
     }
   };
 
-  // --- END OF THE FIX ---
 
   const typingHandler = (e) => {
     setNewMessage(e.target.value);
@@ -233,152 +231,190 @@ const ChatBox = ({ fetchAgain, setFetchAgain, socket }) => {
   const otherUserIsTyping = typingStatus[selectedChat?._id];
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-xl shadow-lg border border-gray-200">
+    <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700">
       {selectedChat ? (
         <>
           {/* Header */}
-          <div className="flex items-center justify-between p-3 border-b border-gray-200 flex-shrink-0">
+          <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
             <div className="flex items-center gap-3">
-              <button onClick={() => setSelectedChat(null)} className="md:hidden p-1 rounded-full hover:bg-gray-100 text-gray-600">
+              <button
+                onClick={() => setSelectedChat(null)}
+                className="md:hidden p-1 rounded-full hover:bg-gray-100 text-gray-600"
+              >
                 <ArrowLeft size={20} />
               </button>
-              <img src={selectedChat.isGroupChat ? 'https://i.pravatar.cc/150?u=group' : sender?.pic} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
-              <h2 className="text-lg font-semibold text-gray-800">{selectedChat.isGroupChat ? selectedChat.chatName : sender?.name}</h2>
+              <img
+                src={selectedChat.isGroupChat ? 'https://i.pravatar.cc/150?u=group' : sender?.pic}
+                alt="avatar"
+                className="w-10 h-10 rounded-full object-cover"
+              />
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                {selectedChat.isGroupChat ? selectedChat.chatName : sender?.name}
+              </h2>
             </div>
             {selectedChat.isGroupChat && (
               <UpdateGroupChatModal fetchAgain={fetchAgain} setFetchAgain={setFetchAgain}>
-                <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600"><Settings size={20} /></button>
+                <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600">
+                  <Settings size={20} />
+                </button>
               </UpdateGroupChatModal>
             )}
           </div>
-          
+  
           {/* Messages Area */}
-          <div 
-            ref={messageContainerRef}
-            onScroll={handleScroll}
-            className="relative flex-1 p-2 sm:p-4 overflow-y-auto bg-gray-50"
-          >
-            {loading ? 
-              <div className="flex justify-center items-center h-full"><LoaderCircle className="w-8 h-8 text-blue-600 animate-spin" /></div> 
-              : <>
-                  <ScrollableChat messages={messages} setReplyingTo={setReplyingTo} />
-                  {/* This empty div is our anchor point at the bottom of the messages */}
-                  <div ref={messagesEndRef} />
-                </>
-            }
-            
-            {/* The "Scroll to Bottom" button, conditionally rendered */}
+          <div className="relative flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
+            {loading ? (
+              <div className="flex justify-center items-center h-full">
+                <LoaderCircle className="w-8 h-8 text-indigo-600 animate-spin" />
+              </div>
+            ) : (
+              <>
+                <ScrollableChat messages={messages} setReplyingTo={setReplyingTo} />
+                <div ref={messagesEndRef} />
+              </>
+            )}
+  
             {showScrollToBottom && (
-                <button 
-                    onClick={scrollToBottom}
-                    className="absolute bottom-4 right-4 z-10 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-opacity animate-bounce"
-                    aria-label="Scroll to bottom"
-                >
-                    <ArrowDown size={20} />
-                </button>
+              <button
+                onClick={scrollToBottom}
+                className="absolute bottom-4 right-4 z-10 p-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-opacity animate-bounce"
+                aria-label="Scroll to bottom"
+              >
+                <ArrowDown size={20} />
+              </button>
             )}
           </div>
-          
-          {/* Reply Context Preview Bar */}
-          {replyingTo && (
-            <div className="p-2 border-t border-b border-gray-200 bg-gray-50">
-              <div className="bg-gray-200 p-2 rounded-lg flex items-center justify-between text-sm">
+  
+          {/* Reply / File / Typing + Input */}
+          <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 p-2 space-y-2 bg-white dark:bg-slate-800">
+            {/* Reply Preview UI */}
+            {replyingTo && (
+              <div className="bg-gray-100 dark:bg-slate-700 p-2 rounded-lg flex items-center justify-between text-sm">
                 <div className="border-l-4 border-blue-500 pl-3 min-w-0">
-                  <p className="font-bold text-blue-600">Replying to {replyingTo.sender.name === user.name ? "yourself" : replyingTo.sender.name}</p>
-                  <p className="text-gray-600 truncate">
-                    {replyingTo.content || "a file"}
+                  <p className="font-bold text-blue-600">
+                    Replying to {replyingTo.sender.name === user.name ? 'yourself' : replyingTo.sender.name}
                   </p>
+                  <p className="text-gray-600 truncate">{replyingTo.content || 'a file'}</p>
                 </div>
-                <button onClick={() => setReplyingTo(null)} className="p-1 text-gray-500 hover:text-red-600 rounded-full">
+                <button
+                  onClick={() => setReplyingTo(null)}
+                  className="p-1 text-gray-500 hover:text-red-600 rounded-full"
+                >
                   <X size={18} />
                 </button>
               </div>
-            </div>
-          )}
-
-          {/* File Preview Area */}
-          {fileToPreview && (
-            <div className="p-2 border-t border-gray-200">
-              <div className="bg-gray-100 p-2 rounded-lg flex items-center justify-between">
+            )}
+  
+            {/* File Preview UI */}
+            {fileToPreview && (
+              <div className="bg-gray-100 dark:bg-slate-700 p-2 rounded-lg flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
-                  {fileToPreview.type.startsWith("image/") ? (
-                    <img src={URL.createObjectURL(fileToPreview)} alt="preview" className="w-10 h-10 rounded-md object-cover"/>
+                  {fileToPreview.type.startsWith('image/') ? (
+                    <img
+                      src={URL.createObjectURL(fileToPreview)}
+                      alt="preview"
+                      className="w-10 h-10 rounded-md object-cover"
+                    />
                   ) : (
-                    <div className="w-10 h-10 bg-gray-200 rounded-md flex items-center justify-center flex-shrink-0"><Paperclip size={20} className="text-gray-500"/></div>
+                    <div className="w-10 h-10 bg-gray-200 rounded-md flex items-center justify-center flex-shrink-0">
+                      <Paperclip size={20} className="text-gray-500" />
+                    </div>
                   )}
                   <span className="text-sm text-gray-700 truncate">{fileToPreview.name}</span>
                 </div>
-                <button onClick={() => setFileToPreview(null)} disabled={uploading} className="p-1 text-gray-500 hover:text-red-600 rounded-full disabled:opacity-50"><X size={18} /></button>
+                <button
+                  onClick={() => setFileToPreview(null)}
+                  disabled={uploading}
+                  className="p-1 text-gray-500 hover:text-red-600 rounded-full disabled:opacity-50"
+                >
+                  <X size={18} />
+                </button>
               </div>
-            </div>
-          )}
-
-          {/* Typing Indicator */}
-          {otherUserIsTyping && <div className="px-4 py-1 text-sm text-gray-500 italic">typing...</div>}
-
-          {/* Input Area */}
-          <div className="p-2 sm:p-4 border-t border-gray-200 bg-white">
-            <div className="relative">
+            )}
+  
+            {/* Typing Indicator */}
+            {otherUserIsTyping && (
+              <div className="px-2 text-sm text-slate-500 dark:text-slate-400 italic">typing...</div>
+            )}
+  
+            {/* --- START OF INPUT AREA REDESIGN --- */}
+            <div className="relative flex items-center">
               {showEmojiPicker && (
-                <div ref={emojiPickerRef} className="absolute bottom-14 z-10">
-                  <EmojiPicker onEmojiClick={handleEmojiClick} autoFocusSearch={false} height={400} width={320} emojiStyle="native" />
+                <div ref={emojiPickerRef} className="absolute bottom-12 z-10">
+                  <EmojiPicker
+                    onEmojiClick={handleEmojiClick}
+                    autoFocusSearch={false}
+                    height={350}
+                    width={300}
+                    theme={theme}
+                  />
                 </div>
               )}
-              <form onSubmit={handleSend} className="flex items-center space-x-2">
+  
+              {/* Attach File and Emoji Buttons */}
+              <div className="flex items-center">
                 <input type="file" ref={fileInputRef} onChange={handleFileSelection} className="hidden" />
                 <button
                   type="button"
                   onClick={() => fileInputRef.current.click()}
                   disabled={uploading}
-                  className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100 focus:outline-none disabled:cursor-not-allowed"
-                  aria-label="Attach file"
+                  className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
                 >
-                  {uploading ? <LoaderCircle className="w-5 h-5 text-blue-600 animate-spin" /> : <Paperclip size={20} />}
+                  {uploading ? <LoaderCircle className="w-5 h-5 animate-spin" /> : <Paperclip size={20} />}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-2 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100 focus:outline-none"
-                  aria-label="Open emoji picker"
+                  className="p-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
                 >
                   <Smile size={20} />
                 </button>
-                <input
-                  ref={textInputRef} // This ref must be on the input element
-                  type="text"
-                  placeholder="Type a message..."
-                  value={newMessage}
-                  onChange={typingHandler}
-                  onFocus={() => {
-                    setShowEmojiPicker(false);
-                    if (socket) {
-                      socket.emit("mark as read", { chatId: selectedChat._id, userId: user._id });
-                    }
-                  }}
-                  autoComplete="off"
-                  className="flex-1 w-full px-4 py-2 bg-gray-100 border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={!!fileToPreview || uploading}
-                />
-                <button
-                  type="submit"
-                  className="p-3 text-white bg-blue-600 rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-400"
-                  disabled={uploading || (!newMessage.trim() && !fileToPreview)}
-                  aria-label="Send message"
-                >
-                  {uploading ? <LoaderCircle className="w-4 h-4 animate-spin"/> : <Send size={18} />}
-                </button>
+              </div>
+  
+              {/* The Form for Text Input and Sending */}
+              <form onSubmit={handleSend} className="flex-1 ml-2">
+                <div className="relative">
+                  <input
+                    ref={textInputRef}
+                    type="text"
+                    placeholder="Type a message..."
+                    value={newMessage}
+                    onChange={typingHandler}
+                    onFocus={() => {
+                      setShowEmojiPicker(false);
+                      if (socket) {
+                        socket.emit('mark as read', { chatId: selectedChat._id, userId: user._id });
+                      }
+                    }}
+                    autoComplete="off"
+                    className="w-full px-4 py-2 pr-12 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-200 border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={!!fileToPreview || uploading}
+                  />
+                  <button
+                    type="submit"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-indigo-600 disabled:opacity-50"
+                    disabled={uploading || (!newMessage.trim() && !fileToPreview)}
+                  >
+                    {uploading ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Send size={20} />}
+                  </button>
+                </div>
               </form>
             </div>
+            {/* --- END OF INPUT AREA REDESIGN --- */}
           </div>
         </>
       ) : (
-        <div className="flex flex-col items-center justify-center h-full text-gray-400 bg-gray-50 rounded-xl">
-          <h3 className="text-xl font-medium">Select a chat</h3>
-          <p>or search for a user to start messaging.</p>
+        <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-xl">
+          <h3 className="text-xl font-medium">Select a conversation</h3>
+          <p className="max-w-xs">Start a new chat by searching for a user, or continue an existing conversation.</p>
         </div>
       )}
     </div>
   );
+  
 };
+
+
+
 
 export default ChatBox;

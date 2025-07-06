@@ -137,19 +137,21 @@ const createGroupChat = expressAsyncHandler(async (req, res) => {
   }
 });
 
-const renameGroupChat = expressAsyncHandler(async (req, res) => {
-  const { chatId, newChatName } = req.body;
+const updateGroupDetails = expressAsyncHandler(async (req, res) => {
+  const { chatId, chatName, groupIcon } = req.body;
 
-  const updatedChat = await Chat.findByIdAndUpdate(
-    chatId,
-    { chatName: newChatName },
-    { new: true }
-  )
+  const updateData = {};
+  if (chatName) updateData.chatName = chatName;
+  if (groupIcon) updateData.groupIcon = groupIcon;
+
+  const updatedChat = await Chat.findByIdAndUpdate(chatId, updateData, {
+    new: true,
+  })
     .populate("users", "-password")
     .populate("groupAdmin", "-password");
 
   if (!updatedChat) {
-    res.status(400);
+    res.status(404);
     throw new Error("Chat Not Found");
   } else {
     res.status(200).json(updatedChat);
@@ -225,7 +227,7 @@ module.exports = {
   fetchChats,
   deleteChat,
   createGroupChat,
-  renameGroupChat,
+  updateGroupDetails,
   addToGroup,
   removeFromGroup,
   deleteGroupChat,

@@ -18,6 +18,25 @@ api.interceptors.response.use(
   }
 );
 
+export const uploadImage = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", "Chat-App"); // Your Cloudinary Upload Preset
+
+  const cloudinaryAPI =
+    "https://api.cloudinary.com/v1_1/dr8gzltrw/image/upload"; // Your Cloudinary URL
+
+  const response = await fetch(cloudinaryAPI, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error("Image upload failed");
+  }
+  const result = await response.json();
+  return result.secure_url;
+};
+
 
 // --- User Routes ---
 
@@ -67,10 +86,10 @@ export const createGroupChat = (groupData, token) => {
   });
 };
 
-export const renameGroup = (chatId, chatName, token) => {
+export const updateGroupDetails = (updateData, token) => {
   return api.put(
-    "/chat/rename",
-    { chatId, newChatName: chatName },
+    "/chat/group/update", // Use the correct, updated route
+    updateData,
     {
       headers: { Authorization: `Bearer ${token}` },
     }

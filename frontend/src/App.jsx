@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import ChatsPage from "./pages/ChatsPage";
 import ChatProvider from './Context/ChatProvider';
+import LandingPage from "./pages/LandingPage";
 
 
 const App = () => {
@@ -9,7 +10,8 @@ const App = () => {
     <BrowserRouter>
       <ChatProvider>
         <Routes>
-          <Route path="/" Component={ HomePage } />
+          <Route path="/" Component={ LandingPage } />
+          <Route path="/auth" Component={ HomePage } />
           <Route path="/chats" Component={ ChatsPage } />
         </Routes>
       </ChatProvider>
