@@ -5,7 +5,7 @@ const http = require("http");
 const dotenv = require("dotenv");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-const path = require("path");
+const path = require("path"); // path is no longer needed for serving files
 const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes.js");
 const chatRoutes = require("./routes/chatRoutes.js");
@@ -31,18 +31,12 @@ app.use("/api/user", userRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/message", messageRoutes);
 
-// --- Deployment Logic ---
-const __dirname1 = path.resolve();
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname1, "/frontend/build")));
-  app.get("*", (req, res) => {
-    res.sendFile(path.resolve(__dirname1, "frontend", "build", "index.html"));
-  });
-} else {
-  app.get("/", (req, res) => {
-    res.send("API is running for Development!");
-  });
-}
+// --- Deployment Logic (Corrected) ---
+// The backend is now API-only. It doesn't need to know about the frontend files.
+// The frontend Static Site service on Render will handle serving the React app.
+app.get("/", (req, res) => {
+  res.send("NexChat Backend API is running successfully!");
+});
 
 const port = process.env.PORT || 5000;
 const server = http.createServer(app);
@@ -52,6 +46,7 @@ server.listen(
 );
 
 // --- Socket.IO Setup ---
+// Make sure CLIENT_URL is set in your Render environment variables!
 const io = require("socket.io")(server, {
   pingTimeout: 60000,
   cors: {
@@ -76,8 +71,6 @@ io.on("connection", (socket) => {
     console.log("User Joined Room: " + room);
   });
 
-  // FIX: REMOVED THE DUPLICATE AND INCORRECT HANDLERS.
-  // These are the only, and correct, versions.
   socket.on("typing", (room) => socket.in(room).emit("typing", room));
   socket.on("stop typing", (room) => socket.in(room).emit("stop typing", room));
 
