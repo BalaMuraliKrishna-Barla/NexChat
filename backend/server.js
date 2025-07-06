@@ -39,7 +39,7 @@ app.use("/api/message", messageRoutes);
 // The backend is now API-only. It doesn't need to know about the frontend files.
 // The frontend Static Site service on Render will handle serving the React app.
 app.get("/", (req, res) => {
-  res.send("NexChat Backend API is running successfully!");
+  res.send("Konnect Backend API is running successfully!");
 });
 
 const port = process.env.PORT || 5000;

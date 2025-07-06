@@ -38,7 +38,7 @@ const Header = () => {
           className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 cursor-pointer" 
           onClick={() => navigate('/chats')}
         >
-          NexChat
+          Konnect
         </div>
         
         <div className="flex items-center gap-4">

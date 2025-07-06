@@ -75,7 +75,7 @@ const LandingPage = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
               <MessageSquare className="h-8 w-8 text-indigo-600" />
-              <span className="text-2xl font-bold text-slate-900 dark:text-white">NexChat</span>
+              <span className="text-2xl font-bold text-slate-900 dark:text-white">Konnect</span>
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-4">
@@ -107,7 +107,7 @@ const LandingPage = () => {
               </span>
             </motion.h1>
             <motion.p variants={fadeInUp} className="text-lg text-slate-600 dark:text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed">
-              NexChat offers a seamless, secure, and feature-rich platform for both one-on-one chats and group collaboration.
+              Konnect offers a seamless, secure, and feature-rich platform for both one-on-one chats and group collaboration.
             </motion.p>
             <motion.div variants={fadeInUp}>
               <button onClick={() => openAuthModal('signup')} className="bg-indigo-600 text-white px-8 py-4 rounded-xl shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105 flex items-center space-x-2 text-lg font-semibold mx-auto">
@@ -148,7 +148,7 @@ const LandingPage = () => {
               <ShieldCheck className="h-10 w-10 text-brand-primary" />
             </div>
             <h2 className="text-4xl font-bold text-light-text-primary dark:text-dark-text-primary mb-4">Your Privacy, Our Priority</h2>
-            <p className="text-xl text-light-text-secondary dark:text-dark-text-secondary max-w-3xl mx-auto">Built with security at its core, NexChat uses modern authentication and secure connections to keep your conversations private.</p>
+            <p className="text-xl text-light-text-secondary dark:text-dark-text-secondary max-w-3xl mx-auto">Built with security at its core, Konnect uses modern authentication and secure connections to keep your conversations private.</p>
           </motion.div>
         </div>
       </section>
@@ -170,7 +170,7 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="bg-slate-800 dark:bg-slate-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-slate-400">
-          <p>© {new Date().getFullYear()} NexChat. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Konnect. All rights reserved.</p>
         </div>
       </footer>
 
@@ -178,7 +178,7 @@ const LandingPage = () => {
       <ReusableModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        title="Welcome to NexChat"
+        title="Welcome to Konnect"
         theme={landingTheme}
       >
         <Auth 
